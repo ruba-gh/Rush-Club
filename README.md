@@ -2,6 +2,8 @@
 
 A responsive Rush web app with three primary views: Leaderboard, Membership, and Awards. Built with React, Vinext, and Cloudflare D1. Arabic is the default language, with English available from the header. Email is not collected.
 
+The interface uses a compact app shell with persistent three-tab navigation. Leaderboard contains rankings only; Membership contains profile, attendance totals, and account controls; Awards contains a filterable medal grid, with descriptions available on tap. Large page banners, promotional side panels, and footers are omitted.
+
 ## Included
 
 - Arabic and English UI, RTL/LTR layouts, saved language preference, localized dates, counts, validation and API error messages. Arabic and Persian digits are accepted in phone numbers and PINs.
