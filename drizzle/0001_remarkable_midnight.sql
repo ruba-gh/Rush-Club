@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `member_award_unique` ON `earned_awards` (`member_id`,`award_id`);

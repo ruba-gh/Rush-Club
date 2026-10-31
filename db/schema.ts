@@ -1,0 +1,6 @@
+import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+export const members = sqliteTable('members', { id:text('id').primaryKey(), phone:text('phone').notNull().unique(), name:text('name').notNull(), salt:text('salt').notNull(), pinHash:text('pin_hash').notNull(), joined:text('joined').notNull() });
+export const sessions = sqliteTable('sessions', { token:text('token').primaryKey(), memberId:text('member_id').notNull().references(()=>members.id,{onDelete:'cascade'}), expires:integer('expires').notNull() });
+export const attempts = sqliteTable('attempts', { key:text('key').primaryKey(), count:integer('count').notNull(), resets:integer('resets').notNull() });
+export const activity = sqliteTable('activity', { id:text('id').primaryKey(), memberId:text('member_id').notNull().references(()=>members.id,{onDelete:'cascade'}), kind:text('kind').notNull(), date:text('date').notNull() });
+export const earnedAwards = sqliteTable('earned_awards', { id:text('id').primaryKey(), memberId:text('member_id').notNull().references(()=>members.id,{onDelete:'cascade'}), awardId:text('award_id').notNull(), earnedAt:text('earned_at').notNull() }, t=>[uniqueIndex('member_award_unique').on(t.memberId,t.awardId)]);
