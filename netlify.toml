@@ -1,0 +1,12 @@
+# Netlify serves only the frontend. The Python/SQLite backend requires separate hosting.
+[build]
+  base = "."
+  command = "echo Rush frontend: no build step required"
+  publish = "public"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "same-origin"
+    X-Frame-Options = "DENY"
