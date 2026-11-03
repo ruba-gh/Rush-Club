@@ -1,43 +1,91 @@
-# Rush Members Club
+# Rush · مجتمع اللعب
 
-A responsive Rush web app with three primary views: Leaderboard, Membership, and Awards. Built with React, Vinext, and Cloudflare D1. Arabic is the default language, with English available from the header. Email is not collected.
+مشروع كامل قابل للرفع على GitHub: واجهة عربية/إنجليزية، خادم Python، وقاعدة SQLite. الألوان: `#1C1718` `#99574D` `#DBA18F` `#E7CAB7` `#FFFAF7`.
 
-The interface uses a compact app shell with persistent three-tab navigation. Leaderboard contains rankings only; Membership contains profile, attendance totals, and account controls; Awards contains a filterable medal grid, with descriptions available on tap. Large page banners, promotional side panels, and footers are omitted.
+## تشغيله على جهازك
 
-## Included
+يحتاج Python 3.12 أو أحدث، دون أي مكتبات Python إضافية أو npm install.
 
-- Arabic and English UI, RTL/LTR layouts, saved language preference, localized dates, counts, validation and API error messages. Arabic and Persian digits are accepted in phone numbers and PINs.
-- Reference palette: #1C1718, #99574D, #DBA18F, #E7CAB7, #FFFAF7. Supplied brand artwork is optimized in public/images.
+1. فكّي ضغط المشروع وافتحي مجلده في Terminal.
+2. شغلي `./start.sh` على Mac/Linux. اختاري كلمة مرور للإدارة من 14 حرفًا أو أكثر عندما يسألك الطرفية؛ لا تظهر أثناء الكتابة.
+3. افتحي `http://localhost:8000`.
+4. افتحي رابط «الإدارة» أسفل الموقع وادخلي بكلمة المرور التي اخترتيها.
+5. في مرات التشغيل القادمة استخدمي نفس كلمة المرور، أو اضبطيها عبر أسرار الاستضافة. تغيير متغير كلمة مرور الإدارة هو طريقة تدويرها.
 
-- Saudi phone number + five-digit PIN signup and login. Leading zeros in a PIN are preserved.
-- Salted PBKDF2 PIN hashes, hashed server sessions in HttpOnly/Secure cookies, server authorization, same-origin checks, account and IP attempt limits.
-- Name editing, PIN changes (revokes all sessions), sign out, and permanent deletion requiring current PIN plus DELETE confirmation. Related game records, awards, and sessions are removed.
-- Real database leaderboard using organizer-recorded attendance; last seven days and all time. Only names, IDs, and game totals are returned, never phone numbers.
-- Clearly labeled sample preview with invented stats and separate live club mode.
-- Award gallery and detail dialogs. No award conditions are enabled initially.
+Windows PowerShell:
 
-## Content and configuration
+```powershell
+$secret = Read-Host 'Choose admin password (14+ characters)' -AsSecureString
+$env:RUSH_ADMIN_PASSWORD = [System.Net.NetworkCredential]::new('', $secret).Password
+python server.py
+```
 
-- `app/page.tsx`: page copy, sample players, navigation, client interactions.
-- `lib/i18n.ts`: Arabic award copy, category names, and translated API errors. Other page copy is paired in the `t(English, Arabic)` calls in `app/page.tsx`.
-- `app/globals.css`: responsive styles, colors, badge artwork.
-- `lib/award-catalog.ts`: award names, descriptions, and `awardConditions`. All conditions are null initially. When the organizer chooses rules, configure a metric and threshold. Supported metrics: `game`, `free_game`, `top_three_week`. Counts come from trusted activity records; members cannot write activity or award records through the API.
-- `app/api/club/route.ts`: account API and leaderboard.
-- `db/schema.ts` and `drizzle/`: database schema and migrations.
+## استعراض التصميم
 
-## Remaining setup before opening to players
+زر «شاهدي شكل التجربة» على الصفحة الرئيسية يفتح بيانات توضيحية منفصلة عن قاعدة البيانات. بعدها افتحي «تجمعاتي» واضغطي «شوفي الملعب» برمز DEMO المعبأ تلقائيًا، ثم اختاري مكانًا. الخروج من التجربة يعيدك للبيانات الفعلية. العرض لا ينشئ حجوزات أو نقاطًا حقيقية.
 
-1. Connect an SMS provider for phone ownership verification and PIN recovery. Current phone + PIN login does not verify phone ownership; signup can reserve a number without an SMS. Keep this private development version until verification is added. Five-digit PINs have limited entropy; strict attempt limits are included.
-2. Choose exact scoring, award thresholds, weekly reset timing, and free-game rules. The current proposed ranking is by attended games, using a rolling seven-day window. The final weekly podium rules have not been chosen.
-3. Add the organizer's attendance and reward management workflow. There is deliberately no public activity-write API. Record one `top_three_week` event per member per eligible week when the final weekly calculation is implemented. Free games are counts only; this version does not issue redeemable tickets or accept bookings/payments.
-4. Decide how historical leaderboard entries should be handled when a member deletes their account. This version removes them along with all linked records.
+## الموجود فعليًا
 
-## Run and validate
+- الصفحة الرئيسية للمتصدرات؛ فلترة الريشة والبادل والترتيب حسب الحضور المعتمد، من البداية. التعادل يعطي نفس الترتيب.
+- إنشاء حساب بجوال سعودي ورقم شخصي من 4 أرقام. الحساب ينتظر اعتماد الإدارة قبل دخول التجمعات؛ لا يوجد تحقق SMS.
+- ملف اللاعبة: اسم ظاهر، شخصية مرسومة، منطقة اختيارية، مستوى مستقل لكل رياضة، وإخفاء الاسم من الترتيب.
+- الحذف الذاتي بعد تأكيد الرقم الشخصي؛ يمسح الملف والحجوزات والحضور والمكافآت، ويزيل الهوية من سجل الإدارة. لا يمثل إلغاءً ماليًا أو استرجاعًا آليًا.
+- تغيير الرقم الشخصي وإبطال الجلسات السابقة.
+- رمز مستقل لكل تجمع، يمكن تدويره. يستمر دخول الأعضاء الموجودين من حجوزاتهم بعد تدوير الرمز.
+- ملعب مرسوم بأربع شخصيات، اختيار الفريق بالضغط، مجموعات تتناوب على ملعب واحد. الريشة والبادل متاحتان، التنس قريبًا.
+- منع حجز المكان نفسه من لاعبتين وتكرار تسجيل اللاعبة في التجمع.
+- لوحة الإدارة: إنشاء التجمعات، إغلاق الفرق، نقل لاعبة إلى مكان فارغ، تأكيد الحجز، تأكيد الحضور، اعتماد الحساب واستعادة الرقم الشخصي بعد تحقق خارجي من الهوية.
+- عدد راوندات ودقائق قابلة للتحديد. يشترط تساوي عدد الراوندات للمجموعات. مثال: 8 لاعبات، 6 راوندات × 20 دقيقة = 3 راوندات/ساعة لعب لكل لاعبة.
+- بطاقة واحدة مشتركة بين الرياضات: 5 حضورات مدفوعة تعطي مكافأة لعبة مجانية. الإدارة تستخدم المكافأة على حجز لم يؤكد حضوره بعد. المجانية تزيد الحضور والترتيب ولا تكسب ختمًا مدفوعًا.
+- عدم مضاعفة المكافأة عند تأكيد الحضور مرتين، ومنع استعمال المجانية مرتين.
+- تقرير جهات مجمّع للإدارة فقط، يخفي الجهات الأقل من ثلاث لاعبات.
 
-Install dependencies with the Sites install helper or the configured package manager. Use `npm run dev` for development and `npm run build` for standalone build. Sites uses its build helper and hosting manifest. Apply the generated D1 migration to your local database before exercising real accounts. Sites applies production migrations on deploy.
+## اللوقو
 
-`node tests/accounts.mjs` tests account behavior against an isolated in-memory SQLite database without creating real members. `node node_modules/typescript/bin/tsc --noEmit` checks types.
+`public/logo.svg` مساحة مؤقتة لكلمة rush وليست ادعاءً بأنها شعارك الأصلي. استبدلي الملف بشعارك SVG بنفس الاسم. لو شعارك PNG، ضعي `public/logo.png` وغيري مرجع `logo.svg` في `public/index.html`. لا تحطي أي أسرار داخل public.
 
-## GitHub handoff
+## الرفع على GitHub
 
-Source repository: https://github.com/ruba-gh/Rush-Club. Keep the source, migrations, and lockfile; exclude node_modules, dist, .wrangler, .sites-runtime, and secrets. `.openai/hosting.json` identifies the existing private Sites deployment. A GitHub Pages-only deployment cannot run this backend; it requires a Worker-compatible server and a D1 database, or an adapter to another backend.
+ارفعي محتويات مجلد المشروع إلى مستودعك، دون مجلد `data` أو ملفات `.env`. ملف `.gitignore` مجهز لاستبعادها.
+
+GitHub يحفظ الكود. GitHub Pages لا يشغّل خادم Python ولا قاعدة البيانات؛ لذلك رفع الملفات عليه وحده لن يشغل الحسابات. استضيفي المشروع كاملًا على خادم/استضافة حاويات تدعم Python، مع HTTPS وقرص دائم. لا تفصلي الواجهة والخادم في هذه النسخة؛ كل الطلبات لنفس النطاق.
+
+## إعداد الاستضافة
+
+المتغيرات:
+
+- `RUSH_ADMIN_PASSWORD`: سر قوي وفريد، 14 حرفًا على الأقل. خزنيه في أسرار الاستضافة، وليس GitHub.
+- `RUSH_ENV=production`: يفعّل Secure لملف جلسة الدخول؛ يلزم HTTPS من الخارج.
+- `RUSH_DATA_DIR=/app/data`: مجلد دائم للقاعدة ومفتاح الخادم.
+- `PORT=8000`: أو منفذ الاستضافة.
+
+يوجد Dockerfile؛ شغليه مع volume دائم على `/app/data` وتمرير الأسرار من المنصة. شغلي نسخة خادم واحدة تشارك ملف SQLite المحلي. اجعلي reverse proxy يمرر Host وOrigin كما هما ويطبق حدود الطلبات وTLS. لا تعرضي منفذ HTTP مباشرة للزوار.
+
+قبل دعوة اللاعبات، جرّبي من جهازين: تسجيل لاعبة، اعتمادها من الإدارة، إنشاء تجمع، الانضمام، تأكيد الحجز ثم الحضور. أعيدي تشغيل الاستضافة وتأكدي أن البيانات لم تختفِ وأن تسجيل الدخول والمكافآت مستمران.
+
+## البيانات والنسخ الاحتياطي
+
+مجلد `data` ينشأ عند أول تشغيل، ويحتوي قاعدة البيانات وملف `secret`. لا تنشريهما. احتفظي بنسخ احتياطية مشفرة لكليهما خارج المستودع وبصلاحيات مقيدة؛ فقدان secret يبطل التحقق من الأرقام الشخصية والرموز. لا تشاركي قاعدة البيانات في الدردشة.
+
+يوجد `backup.py` لنسخة SQLite متسقة ونسخة المفتاح؛ ينشئ أرشيفًا محليًا حساسًا خارج المشروع افتراضيًا. خزنيه في مكان خاص ثم طبقي سياسة الاحتفاظ والحذف المناسبة. النسخ الاحتياطية القديمة قد تحتوي بيانات حسابات حُذفت لاحقًا.
+
+## حماية مطبّقة وحدود حالية
+
+الأرقام الشخصية مشتقة بـscrypt مع salt وpepper، ورموز التجمعات والجلسات لا تُخزن كنص ظاهر. الجلسات HttpOnly وSameSite، والتحقق من الصلاحيات على الخادم. توجد حدود محاولات على الدخول ورموز التجمعات، وفحوص Origin/JSON، ومنع عرض الجوال والمنطقة في واجهة API العامة. البيانات الحساسة لا تُرسل لكل اللاعبين ثم تُخفى بصريًا.
+
+الاعتماد اليدوي لا يثبت ملكية الجوال آليًا. تأكدي من صاحبة الحساب عبر تواصلك القائم معها قبل الاعتماد أو استعادة رقمها الشخصي. الرقم الشخصي ذو أربعة أرقام محدود القوة، وحماية الإدارة الحالية كلمة مرور قوية مع حدود محاولات وليست MFA. هذه نسخة تشغيل أولى اختُبرت محليًا، وليست تدقيقًا أمنيًا مستقلًا أو نشرًا إنتاجيًا مكتملًا. فعّلي مراقبة واستضافة مناسبة ومراجعة أمنية قبل الاعتماد الواسع.
+
+## ليست ضمن هذه النسخة
+
+لا يوجد دفع إلكتروني، SMS، تحقق جوال آلي، استعادة ذاتية للجوال، قائمة انتظار، ملاعب متزامنة متعددة، تبديل تلقائي للشريكات بين الراوندات، تصحيح/تراجع عن الحضور من الواجهة، أو واجهة لتغيير سياسة المكافآت. عدد 5 ثابت لهذه النسخة؛ لا تعدلي إعداد القاعدة بعد استخدام البطاقات دون ترحيل يحفظ حقوقها. تعديل قاعدة المكافآت تاريخيًا يحتاج تطويرًا إضافيًا.
+
+الجداول المعروضة تبديل مجموعات ثابتة؛ ليست خوارزمية تلقائية تضمن تنوع الشريكات. الحالات المدعومة: مفتوح، مقفل، مكتمل، ملغي. العدد المكتمل يمنع اختيار مكان إضافي لكنه لا ينشئ قائمة انتظار. يمكن للإدارة قفل أو إلغاء التجمع.
+
+## الاختبارات
+
+```sh
+python3 -m unittest discover -s tests -v
+node --check public/app.js
+```
+
+اختبار تكاملي بقاعدة مؤقتة يشمل الصلاحيات، خصوصية البيانات، اختلاف المستوى بين الرياضات، الحجز المتزامن، عدم مضاعفة الحضور/المكافآت، تدوير الرموز، استمرار صلاحية العضوية، إخفاء الترتيب والحذف. راجعت الواجهة في متصفح سطح مكتب: المتصدرات والملعب واختيار المكان وتبديل اللغة. تجاوب الجوال مطبق في CSS؛ لم أجرِ اختبار جهاز جوال فعلي.
