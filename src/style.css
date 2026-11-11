@@ -27,3 +27,27 @@ footer{display:block;padding:32px 36px 15px}
 .settings-form textarea,.settings-form input{border:1px solid #eadce0;border-radius:17px;background:#faf4f5;padding:15px;outline:none;width:100%;font:inherit;font-size:12px;color:#33272d;line-height:1.9;resize:vertical}
 .settings-form textarea:focus,.settings-form input:focus{border-color:#d589a6}
 @media(max-width:780px){.logo .logo-word{font-size:23px}.logo{gap:5px}footer{padding:26px 21px 14px}.footer-main{align-items:stretch;flex-direction:column;gap:22px}.footer-brand{gap:12px;align-items:flex-start}.footer-brand strong{font-size:20px}.footer-brand p{font-size:10px;line-height:2.2}.footer-logo img{width:51px;height:51px}.footer-btn{align-self:flex-start}.copyright{margin-top:24px}}
+
+/* Admin mobile layout and grouped wishes */
+.admin-logout{background:transparent;border:0;padding:10px 4px;cursor:pointer;color:#35282e;display:inline-flex;gap:9px;align-items:center;font:inherit;font-size:13px;font-weight:600}
+.admin-logout:hover{opacity:.7}
+.admin-content{padding-top:8px}
+.admin-tabs{max-width:100%;width:max-content}
+.admin-form .fields{min-width:0}
+.admin-form .fields label{min-width:0;max-width:100%}
+.admin-form input[type="datetime-local"]{display:block;max-width:100%;width:100%;min-width:0;box-sizing:border-box;direction:ltr;text-align:left;-webkit-appearance:none;appearance:none;font-size:16px}
+.admin-form input[type="datetime-local"]::-webkit-date-and-time-value{text-align:left;min-width:0}
+.admin-form input[type="datetime-local"]::-webkit-datetime-edit{padding:0;min-width:0}
+.wish-overview{display:grid;gap:14px}
+.wish-filters{padding:17px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.wish-filters label{font-size:12px;display:grid;gap:8px;min-width:0}
+.wish-filters select{background:#faf4f5;border:1px solid #eadce0;border-radius:14px;padding:13px;min-width:0;width:100%;font:inherit;color:#33272d}
+.wish-total{font-size:11px;color:#88737c;margin:0 4px}
+.wish-group{padding:22px}
+.wish-group-head{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.wish-group h3{margin:0 0 9px;font-size:17px}
+.wish-group p{margin:0 0 8px;font-size:12px;color:#725e68}
+.wish-group small{font-size:10px;color:#9b8790}
+.wish-count{display:inline-flex;align-items:center;gap:8px;border-radius:30px;background:#edccda;padding:11px 16px;font-weight:600;font-size:13px}
+.wish-empty{padding:32px;text-align:center;color:#8e7380}
+@media(max-width:780px){.admin-content{padding:8px 0 80px}.admin-tabs{width:100%;display:flex;justify-content:space-between;box-sizing:border-box}.admin-tabs button{flex:1;min-width:0;padding:12px 5px;font-size:12px}.admin-form{padding:20px 15px}.admin-form .fields{grid-template-columns:minmax(0,1fr);gap:17px}.admin-form .fields input{min-width:0;width:100%;max-width:100%;font-size:16px}.wish-filters{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.wish-group{padding:18px}.wish-group-head{align-items:flex-start}.admin-item-head{min-width:0}.admin-item-head>div:first-child{min-width:0;overflow-wrap:anywhere}}
