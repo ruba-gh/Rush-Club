@@ -10,3 +10,20 @@
 .reveal.is-visible{opacity:1;transform:translateY(0)}
 @media(max-width:780px){.logo img{width:50px;height:50px}.footer-logo img{width:80px;height:80px}.hero{min-height:160px;padding:27px 8px}.hero h1{font-size:clamp(38px,10vw,52px)}}
 @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+
+/* Rush refined header + footer */
+.logo{gap:10px;justify-content:flex-start;direction:ltr;letter-spacing:0}
+.logo .logo-word{font-size:27px;letter-spacing:-1.8px;color:#35282e;font-weight:700;line-height:1}
+.section-mark{display:none}
+footer{display:block;padding:32px 36px 15px}
+.footer-main{display:flex;align-items:center;justify-content:space-between;gap:22px}
+.footer-brand{display:flex;gap:17px;align-items:center;min-width:0}
+.footer-brand strong{font-size:22px;letter-spacing:-1px;direction:ltr;display:block;text-align:right}
+.footer-brand p{max-width:520px;margin:7px 0 0;font-size:10px;line-height:2.15;color:#e2d4da}
+.footer-logo img{width:64px;height:64px}
+.footer-btn,.footer-placeholder{flex-shrink:0}
+.copyright{margin-top:26px;padding-top:14px;opacity:.72}
+.settings-form label{display:flex;flex-direction:column;gap:10px;font-size:12px;font-weight:600;margin:18px 0}
+.settings-form textarea,.settings-form input{border:1px solid #eadce0;border-radius:17px;background:#faf4f5;padding:15px;outline:none;width:100%;font:inherit;font-size:12px;color:#33272d;line-height:1.9;resize:vertical}
+.settings-form textarea:focus,.settings-form input:focus{border-color:#d589a6}
+@media(max-width:780px){.logo .logo-word{font-size:23px}.logo{gap:5px}footer{padding:26px 21px 14px}.footer-main{align-items:stretch;flex-direction:column;gap:22px}.footer-brand{gap:12px;align-items:flex-start}.footer-brand strong{font-size:20px}.footer-brand p{font-size:10px;line-height:2.2}.footer-logo img{width:51px;height:51px}.footer-btn{align-self:flex-start}.copyright{margin-top:24px}}
