@@ -27,6 +27,11 @@ jobs:
         run: npm run build
         env:
           GITHUB_PAGES: 'true'
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_ADMIN_EMAIL: ${{ vars.VITE_ADMIN_EMAIL }}
+          VITE_RUSH_GROUP_URL: ${{ vars.VITE_RUSH_GROUP_URL }}
+          VITE_PAYMENT_INSTRUCTIONS: ${{ vars.VITE_PAYMENT_INSTRUCTIONS }}
       - run: cp dist/index.html dist/404.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
