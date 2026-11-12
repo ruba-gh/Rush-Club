@@ -123,3 +123,23 @@ footer{display:block;padding:32px 36px 15px}
 .archive-phone-card summary{font-size:12px;font-weight:600;cursor:pointer}
 .archive-phone-card details p{font-size:11px;color:#77606c;line-height:1.8}
 @media(max-width:780px){.wish-controls{align-items:flex-start}.wish-bulk-bar{align-items:stretch;flex-direction:column}.wish-bulk-bar>div{width:100%}.wish-bulk-bar button{flex-grow:1;justify-content:center}.archive-phone-card{padding:18px}.archive-stats{grid-template-columns:1fr}.archive-phone-head strong{font-size:18px}}
+
+/* Admin: edit/cancel registrations and archived wish entries */
+.registration-list .registration-row,.archive-entry{display:flex;align-items:center;justify-content:space-between;gap:15px}
+.registration-player{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}
+.registration-player strong{font-size:12px;font-weight:600}
+.registration-player span{font-size:12px;color:#7d6570}
+.registration-actions,.archive-entry-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.registration-actions button,.archive-entry-actions button{width:36px;height:36px;display:grid;place-items:center;border:1px solid #ead5de;background:#f9eaf0;color:#624655;border-radius:11px;cursor:pointer}
+.registration-actions button:hover,.archive-entry-actions button:hover{background:#efd3de}
+.registration-actions .danger-action,.archive-entry-actions .danger-action{color:#a6415e}
+.archive-entry{border-top:1px solid #eee0e5;padding:13px 0}
+.archive-entry>div:first-child{min-width:0}
+.archive-entry strong{font-size:12px}
+.archive-entry p{margin:6px 0!important}
+.archive-entry small{display:block;font-size:10px;color:#9b8590;line-height:1.8}
+.manage-modal{max-height:calc(100dvh - 32px);overflow-y:auto}
+.manage-modal input,.manage-modal select{width:100%;min-width:0;border:1px solid #eadce0;border-radius:14px;background:#faf4f5;padding:14px;color:#33272d;font:inherit;font-size:12px}
+.manage-modal .edit-regions{display:grid;gap:12px;font-size:12px}
+.manage-modal .chip{padding:11px 13px;font-size:11px}
+@media(max-width:780px){.registration-player{display:grid;gap:4px}.registration-list .registration-row{align-items:flex-start}.archive-entry{align-items:flex-start}.registration-actions button,.archive-entry-actions button{width:35px;height:35px}}
