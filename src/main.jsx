@@ -739,23 +739,25 @@ function App() {
             />
           </a>
           {!adminPath && (
-            <nav>
-              <button
-                className={tab === "wishes" ? "selected" : ""}
-                onClick={() => setTab("wishes")}
-              >
-                الرغبات
-              </button>
-              <span className="wish-arrow-hint" aria-hidden="true">
-                ➜
-              </span>
-              <button
-                className={tab === "sessions" ? "selected" : ""}
-                onClick={() => setTab("sessions")}
-              >
-                المواعيد
-              </button>
-            </nav>
+            <div className="public-nav-wrap">
+              {tab === "sessions" && (
+                <span className="wish-arrow-hint" aria-hidden="true">←</span>
+              )}
+              <nav>
+                <button
+                  className={tab === "wishes" ? "selected" : ""}
+                  onClick={() => setTab("wishes")}
+                >
+                  الرغبات
+                </button>
+                <button
+                  className={tab === "sessions" ? "selected" : ""}
+                  onClick={() => setTab("sessions")}
+                >
+                  المواعيد
+                </button>
+              </nav>
+            </div>
           )}
           {adminPath && (
             <button
@@ -794,8 +796,9 @@ function App() {
                     {tab === "wishes" ? "وش ودك تلعبين؟" : "القيمات الجاية"}
                   </h2>
                   <p className="wish-help-text">
-                    كل ما سجلتي رغباتك تساعدينا نحدد تفاصيل المواعيد الجاية بشكل
-                    أدق.
+                    {tab === "wishes"
+                      ? "كل ما سجلتي رغباتك تساعدينا نحدد تفاصيل المواعيد الجاية بشكل أدق."
+                      : "ما لقيتي موعد يناسبك؟ سجّلي رغباتك عشان تساعدينا نعرف الرياضة والوقت والمنطقة المناسبة لك في المواعيد الجاية."}
                   </p>
                 </div>
               </div>
@@ -1004,7 +1007,7 @@ function App() {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <Users size={18} /> انضمي للمجموعة
+                    <Users className="group-join-icon" size={18} /> انضمي للمجموعة
                   </a>
                 ) : (
                   <span className="footer-placeholder">
