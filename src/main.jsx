@@ -54,6 +54,7 @@ const blankSession = () => ({
   starts_at: "",
   ends_at: "",
   capacity: 4,
+  location_url: "",
 });
 const Riyal = () => (
   <img
@@ -95,6 +96,15 @@ const hour = (d) =>
     hour12: true,
   }).format(new Date(d));
 const validPhone = (p) => /^05\d{8}$/.test(p);
+const safeMapUrl = (value) => {
+  if (!value || !value.trim()) return "";
+  try {
+    const u = new URL(value.trim());
+    return ["https:", "http:"].includes(u.protocol) ? u.href : null;
+  } catch {
+    return null;
+  }
+};
 const isValidUuid = (id) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 const weekStart = () => {
@@ -156,9 +166,9 @@ function App() {
     [wishTimes, setWishTimes] = useState([]);
   const [sessionForm, setSessionForm] = useState(blankSession);
   const [wishRegions, setWishRegions] = useState([]),
-    [wishSportFilter, setWishSportFilter] = useState("all"),
-    [wishDayFilter, setWishDayFilter] = useState("all"),
-    [wishRegionFilter, setWishRegionFilter] = useState("all");
+    [wishSportFilter, setWishSportFilter] = useState([]),
+    [wishDayFilter, setWishDayFilter] = useState([]),
+    [wishRegionFilter, setWishRegionFilter] = useState([]);
   async function loadSettings() {
     if (!db) return;
     const { data, error } = await db
@@ -439,6 +449,8 @@ function App() {
   async function saveSession(e) {
     e.preventDefault();
     if (!db) return flash("اربطي Supabase أولًا");
+    const verifiedLocation = safeMapUrl(sessionForm.location_url);
+    if (verifiedLocation === null) return flash("تأكدي أن رابط الموقع يبدأ بـ https:// أو http://");
     if (
       sessionForm.price === "" ||
       Number(sessionForm.price) < 0 ||
@@ -450,6 +462,7 @@ function App() {
     setBusy(true);
     const payload = {
       ...sessionForm,
+      location_url: verifiedLocation || null,
       price: Number(sessionForm.price),
       capacity: Number(sessionForm.capacity),
       starts_at: new Date(sessionForm.starts_at).toISOString(),
@@ -674,10 +687,10 @@ function App() {
     wishes
       .filter(
         (w) =>
-          (wishSportFilter === "all" || w.sport === wishSportFilter) &&
-          (wishDayFilter === "all" || w.day === wishDayFilter) &&
-          (wishRegionFilter === "all" ||
-            (Array.isArray(w.regions) && w.regions.includes(wishRegionFilter))),
+          (!wishSportFilter.length || wishSportFilter.includes(w.sport)) &&
+          (!wishDayFilter.length || wishDayFilter.includes(w.day)) &&
+          (!wishRegionFilter.length ||
+            (Array.isArray(w.regions) && w.regions.some((r) => wishRegionFilter.includes(r)))),
       )
       .reduce((acc, w) => {
         const key = [w.week_start, w.sport, w.day, w.period].join("|");
@@ -735,6 +748,7 @@ function App() {
       region: session.region || "شمال الرياض",
       price: session.price ?? 0,
       capacity: session.capacity,
+      location_url: session.location_url || "",
       starts_at: "",
       ends_at: "",
     });
@@ -948,7 +962,7 @@ function App() {
                             </span>
                             <span className="seat-pill">
                               <Users size={14} />
-                              {count} / {s.capacity}
+                              متبقي {Math.max(0, Number(s.capacity) - Number(count))}
                             </span>
                           </div>
                           <div className="session-main">
@@ -966,6 +980,11 @@ function App() {
                                 <MapPin size={16} />
                                 {s.region || "الرياض"}
                               </span>
+                              {safeMapUrl(s.location_url) && (
+                                <a className="session-map-link" href={safeMapUrl(s.location_url)} target="_blank" rel="noopener noreferrer">
+                                  <MapPin size={15} /> موقع الملعب على الخريطة
+                                </a>
+                              )}
                             </div>
                           </div>
                           <div className="session-bottom">
@@ -1166,6 +1185,21 @@ function App() {
                       </select>
                     </label>
                     <label>
+                      رابط موقع الملعب (اختياري)
+                      <input
+                        type="url"
+                        dir="ltr"
+                        placeholder="https://maps.app.goo.gl/..."
+                        value={sessionForm.location_url || ""}
+                        onChange={(e) =>
+                          setSessionForm({
+                            ...sessionForm,
+                            location_url: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
                       سعر اللاعبة (ريال)
                       <input
                         required
@@ -1252,7 +1286,7 @@ function App() {
                         </strong>
                         <p>
                           {fmt(s.starts_at)} · {hour(s.starts_at)} ·{" "}
-                          {counts[s.id] ?? s.count ?? 0}/{s.capacity}
+                          متبقي {Math.max(0, Number(s.capacity) - Number(counts[s.id] ?? s.count ?? 0))}
                         </p>
                       </div>
                       <div className="mini-actions">
@@ -1276,6 +1310,7 @@ function App() {
                               capacity: s.capacity,
                               region: s.region || "شمال الرياض",
                               price: s.price ?? 0,
+                              location_url: s.location_url || "",
                             });
                             window.scrollTo({ top: 0, behavior: "smooth" });
                           }}
@@ -1345,51 +1380,38 @@ function App() {
                 {wishView === "active" ? (
                   <>
                     <div className="wish-filters panel">
-                      <label>
-                        الرياضة
-                        <select
-                          aria-label="تصفية الرغبات حسب الرياضة"
-                          value={wishSportFilter}
-                          onChange={(e) => setWishSportFilter(e.target.value)}
-                        >
-                          <option value="all">كل الرياضات</option>
-                          {sports.map((x) => (
-                            <option key={x} value={x}>
-                              {x}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        اليوم
-                        <select
-                          aria-label="تصفية الرغبات حسب اليوم"
-                          value={wishDayFilter}
-                          onChange={(e) => setWishDayFilter(e.target.value)}
-                        >
-                          <option value="all">كل الأيام</option>
-                          {days.map((x) => (
-                            <option key={x} value={x}>
-                              {x}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        المنطقة
-                        <select
-                          aria-label="تصفية الرغبات حسب المنطقة"
-                          value={wishRegionFilter}
-                          onChange={(e) => setWishRegionFilter(e.target.value)}
-                        >
-                          <option value="all">كل المناطق</option>
-                          {regions.map((x) => (
-                            <option key={x} value={x}>
-                              {x}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      {[
+                        { label: "الرياضات", options: sports, values: wishSportFilter, update: setWishSportFilter },
+                        { label: "الأيام", options: days, values: wishDayFilter, update: setWishDayFilter },
+                        { label: "المناطق", options: regions, values: wishRegionFilter, update: setWishRegionFilter }
+                      ].map((filter) => (
+                        <fieldset className="wish-filter-group" key={filter.label}>
+                          <legend>{filter.label}</legend>
+                          <div className="wish-filter-options">
+                            {filter.options.map((option) => (
+                              <label key={option} className={"wish-filter-option " + (filter.values.includes(option) ? "active" : "")}>
+                                <input
+                                  type="checkbox"
+                                  checked={filter.values.includes(option)}
+                                  onChange={() => filter.update((previous) =>
+                                    previous.includes(option)
+                                      ? previous.filter((x) => x !== option)
+                                      : [...previous, option]
+                                  )}
+                                />
+                                {option}
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+                      ))}
+                      {(wishSportFilter.length > 0 || wishDayFilter.length > 0 || wishRegionFilter.length > 0) && (
+                        <button type="button" className="clear-wish-filters" onClick={() => {
+                          setWishSportFilter([]);
+                          setWishDayFilter([]);
+                          setWishRegionFilter([]);
+                        }}>مسح التصفيات</button>
+                      )}
                     </div>
                     <div className="wish-controls">
                       <label className="select-all-label">
