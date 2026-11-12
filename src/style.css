@@ -51,3 +51,27 @@ footer{display:block;padding:32px 36px 15px}
 .wish-count{display:inline-flex;align-items:center;gap:8px;border-radius:30px;background:#edccda;padding:11px 16px;font-weight:600;font-size:13px}
 .wish-empty{padding:32px;text-align:center;color:#8e7380}
 @media(max-width:780px){.admin-content{padding:8px 0 80px}.admin-tabs{width:100%;display:flex;justify-content:space-between;box-sizing:border-box}.admin-tabs button{flex:1;min-width:0;padding:12px 5px;font-size:12px}.admin-form{padding:20px 15px}.admin-form .fields{grid-template-columns:minmax(0,1fr);gap:17px}.admin-form .fields input{min-width:0;width:100%;max-width:100%;font-size:16px}.wish-filters{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.wish-group{padding:18px}.wish-group-head{align-items:flex-start}.admin-item-head{min-width:0}.admin-item-head>div:first-child{min-width:0;overflow-wrap:anywhere}}
+
+/* Rush session cards — compact, balanced, mobile-first */
+.session-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));align-items:stretch}
+.session-card,.session-card:nth-child(even){background:#fffafbed;border:1px solid #fff;border-radius:29px;min-height:345px;padding:24px;box-shadow:0 12px 34px #a0647712;gap:0}
+.session-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 22px}
+.session-sport{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border-radius:999px;background:#f6e7ec;color:#6e4657;font-size:12px;font-weight:600}
+.session-card .seat-pill{padding:9px 12px;background:#f7f0f2;font-weight:600;font-size:12px;white-space:nowrap}
+.session-main{flex:1}
+.session-card h3{font-size:21px;line-height:1.6;margin:0 0 17px;overflow-wrap:anywhere}
+.session-card .session-info{margin:0;gap:13px}
+.session-card .session-info span{font-size:12px;line-height:1.7;display:flex;align-items:center;gap:10px}
+.session-card .session-info svg{flex-shrink:0}
+.session-bottom{padding:23px 0 14px;display:flex;align-items:center;justify-content:flex-start}
+.price-pill{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;background:#f2cfde;color:#35282e;border-radius:999px;font-size:16px;font-weight:700;line-height:1}
+.riyal-symbol{width:14px;height:17px;display:block;object-fit:contain}
+.session-card>.btn{margin-top:0}
+.wish-filters{grid-template-columns:repeat(3,minmax(0,1fr))}
+.wish-entry{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wish-person{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;min-width:0;flex:1}
+.wish-person strong{font-weight:600}
+.wish-person small{width:100%;color:#927b84;font-size:10px;line-height:1.8}
+.wish-delete{background:#f6e2e8;color:#703b4f;border:1px solid #e9c4d1;border-radius:12px;padding:9px 12px;font:inherit;font-size:11px;display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
+.wish-delete:hover{background:#edcfda}
+@media(max-width:780px){.session-grid{grid-template-columns:1fr}.session-card{padding:21px;min-height:315px}.session-top{gap:8px}.wish-filters{grid-template-columns:1fr}.wish-person{flex-direction:column;align-items:flex-start;gap:5px}.wish-person small{width:auto}.wish-entry{align-items:flex-start}}
