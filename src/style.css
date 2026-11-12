@@ -1668,3 +1668,16 @@ footer {
   line-height: 1.9;
   color: #7f6a73;
 }
+
+/* Multi-select wish filters: independent selections within each category */
+.wish-filters{grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
+.wish-filter-group{min-width:0;margin:0;padding:0;border:0}
+.wish-filter-group legend{font-size:12px;font-weight:600;color:#604b56;margin-bottom:11px}
+.wish-filter-options{display:flex;flex-wrap:wrap;gap:7px}
+.wish-filter-option{display:inline-flex!important;align-items:center;gap:6px;border:1px solid #e8d5dd;border-radius:999px;background:#fcf5f7;color:#59444f;padding:8px 11px;font-size:11px!important;line-height:1.6;cursor:pointer;white-space:nowrap}
+.wish-filter-option input{width:14px;height:14px;accent-color:#ab6f8a;cursor:pointer;margin:0}
+.wish-filter-option.active{background:#f0cedd;border-color:#dcaac1;color:#3b2932}
+.clear-wish-filters{grid-column:1/-1;justify-self:start;background:transparent;border:0;color:#7a4760;text-decoration:underline;cursor:pointer;font:inherit;font-size:11px;padding:5px}
+.session-map-link{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;color:#935270;font-size:12px;font-weight:600;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.session-map-link:hover{color:#6a324d}
+@media(max-width:780px){.wish-filters{grid-template-columns:1fr;gap:18px}.wish-filter-option{white-space:normal}}
