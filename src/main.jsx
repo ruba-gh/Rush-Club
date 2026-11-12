@@ -18,6 +18,7 @@ import {
   Clock,
   ShieldCheck,
   MoreHorizontal,
+  Copy,
 } from "lucide-react";
 import "./style.css";
 const url = import.meta.env.VITE_SUPABASE_URL,
@@ -726,6 +727,20 @@ function App() {
       offset = x.getTimezoneOffset() * 60000;
     return new Date(x - offset).toISOString().slice(0, 16);
   };
+  const repeatSession = (session) => {
+    setEdit(null);
+    setSessionForm({
+      sport: session.sport,
+      venue: session.venue,
+      region: session.region || "شمال الرياض",
+      price: session.price ?? 0,
+      capacity: session.capacity,
+      starts_at: "",
+      ends_at: "",
+    });
+    flash("تم نسخ تفاصيل الموعد. حددي تاريخ ووقت الموعد الجديد ثم احفظيه.");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
   return (
     <div className="site">
       <div className="orb orb-one" />
@@ -1241,6 +1256,14 @@ function App() {
                         </p>
                       </div>
                       <div className="mini-actions">
+                        <button
+                          type="button"
+                          aria-label="تكرار الموعد"
+                          title="تكرار الموعد"
+                          onClick={() => repeatSession(s)}
+                        >
+                          <Copy size={17} />
+                        </button>
                         <button
                           aria-label="تعديل"
                           onClick={() => {
