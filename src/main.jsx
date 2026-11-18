@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -19,8 +19,11 @@ import {
   ShieldCheck,
   MoreHorizontal,
   Copy,
+  Bell,
 } from "lucide-react";
 import "./style.css";
+import { days, regions, sports, periodsForDay, useWishAlerts, WishAlertPanel, WishBoard } from "./wishes";
+import { translate } from "./translations";
 const url = import.meta.env.VITE_SUPABASE_URL,
   key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const db = url && key ? createClient(url, key) : null;
@@ -28,24 +31,6 @@ const defaultGroup = import.meta.env.VITE_RUSH_GROUP_URL || "";
 const defaultPayment =
   import.meta.env.VITE_PAYMENT_INSTRUCTIONS ||
   "يرجى التواصل مع إدارة Rush للحصول على بيانات الدفع. الحجز يتأكد بعد الدفع.";
-const sports = ["تنس ريشة", "بادل", "تنس"];
-const days = [
-  "الأحد",
-  "الإثنين",
-  "الثلاثاء",
-  "الأربعاء",
-  "الخميس",
-  "الجمعة",
-  "السبت",
-];
-const times = ["٥–٧ مساءً", "٧–٩ مساءً"];
-const regions = [
-  "شمال الرياض",
-  "جنوب الرياض",
-  "شرق الرياض",
-  "غرب الرياض",
-  "وسط الرياض",
-];
 const blankSession = () => ({
   sport: "تنس ريشة",
   venue: "",
@@ -56,45 +41,13 @@ const blankSession = () => ({
   capacity: 4,
   location_url: "",
 });
-const Riyal = () => (
+const Riyal = ({ alt }) => (
   <img
     className="riyal-symbol"
     src={import.meta.env.BASE_URL + "riyal.svg"}
-    alt="ريال سعودي"
+    alt={alt}
   />
 );
-const demoSessions = [
-  {
-    id: "demo-1",
-    sport: "تنس ريشة",
-    venue: "ملعب Rush",
-    starts_at: "2026-11-19T16:00:00",
-    ends_at: "2026-11-19T18:00:00",
-    capacity: 12,
-    count: 8,
-  },
-  {
-    id: "demo-2",
-    sport: "بادل",
-    venue: "مركز بادل الرياض",
-    starts_at: "2026-11-20T18:00:00",
-    ends_at: "2026-11-20T19:00:00",
-    capacity: 4,
-    count: 3,
-  },
-];
-const fmt = (d) =>
-  new Intl.DateTimeFormat("ar-SA", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).format(new Date(d));
-const hour = (d) =>
-  new Intl.DateTimeFormat("ar-SA", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(new Date(d));
 const validPhone = (p) => /^05\d{8}$/.test(p);
 const safeMapUrl = (value) => {
   if (!value || !value.trim()) return "";
@@ -129,17 +82,48 @@ function IconButton({ children, icon: Icon = Heart, ...props }) {
     </button>
   );
 }
+async function readAllRows(query) {
+  const rows = [];
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await query().range(offset, offset + pageSize - 1);
+    if (error) return { error };
+    rows.push(...data);
+    if (data.length < pageSize) return { data: rows };
+  }
+}
+
 function App() {
+  const [language, setLanguage] = useState(() => localStorage.getItem("rush-language") === "en" ? "en" : "ar");
+  const t = (text) => translate(language, text);
+  const noticeTimer = useRef(null);
+  const locale = language === "ar" ? "ar-SA" : "en-GB";
+  const fmt = (date) => new Intl.DateTimeFormat(locale, {
+    weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Riyadh",
+  }).format(new Date(date));
+  const hour = (date) => new Intl.DateTimeFormat(locale, {
+    hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Riyadh",
+  }).format(new Date(date));
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+    document.title = t("RUSH | قيمك الجاي");
+    localStorage.setItem("rush-language", language);
+  }, [language]);
+
   const adminPath =
     decodeURIComponent(location.pathname)
       .replace(/\/$/, "")
       .endsWith("/ادارة") ||
     location.pathname.replace(/\/$/, "").endsWith("/admin");
+  const [showAlerts, setShowAlerts] = useState(false);
+  const wishAlerts = useWishAlerts(db, !adminPath);
+  const alertCount = new Set(wishAlerts.alerts.flatMap((alert) => alert.session_ids)).size;
   const [settings, setSettings] = useState({
       group_url: defaultGroup,
       payment_instructions: defaultPayment,
+      payment_instructions_en: "",
     }),
-    [settingsReady, setSettingsReady] = useState(false),
     [tab, setTab] = useState("sessions"),
     [sessions, setSessions] = useState([]),
     [counts, setCounts] = useState({}),
@@ -160,28 +144,24 @@ function App() {
     [archivedWishes, setArchivedWishes] = useState([]),
     [wishView, setWishView] = useState("active"),
     [wishActionBusy, setWishActionBusy] = useState(false);
-  const [person, setPerson] = useState({ name: "", phone: "" }),
-    [wishSports, setWishSports] = useState([]),
-    [wishDays, setWishDays] = useState([]),
-    [wishTimes, setWishTimes] = useState([]);
+  const [person, setPerson] = useState({ name: "", phone: "" });
   const [sessionForm, setSessionForm] = useState(blankSession);
-  const [wishRegions, setWishRegions] = useState([]),
-    [wishSportFilter, setWishSportFilter] = useState([]),
+  const [wishSportFilter, setWishSportFilter] = useState([]),
     [wishDayFilter, setWishDayFilter] = useState([]),
     [wishRegionFilter, setWishRegionFilter] = useState([]);
   async function loadSettings() {
     if (!db) return;
     const { data, error } = await db
       .from("public_site_settings")
-      .select("group_url,payment_instructions")
+      .select("group_url,payment_instructions,payment_instructions_en")
       .eq("id", 1)
       .maybeSingle();
     if (!error && data) {
       setSettings({
         group_url: data.group_url || "",
         payment_instructions: data.payment_instructions || "",
+        payment_instructions_en: data.payment_instructions_en || "",
       });
-      setSettingsReady(true);
     }
   }
   async function load() {
@@ -208,38 +188,49 @@ function App() {
           (ct || []).map((x) => [x.session_id, x.registered_count]),
         ),
       );
+    return data || [];
   }
   async function loadAdmin() {
     if (!db) return;
     const [w, r, st, a] = await Promise.all([
-      db
+      readAllRows(() => db
         .from("preferences")
         .select("*")
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .order("id")),
       db
         .from("registrations")
         .select("*")
         .order("created_at", { ascending: false }),
       db
         .from("site_settings")
-        .select("group_url,payment_instructions")
+        .select("group_url,payment_instructions,payment_instructions_en")
         .eq("id", 1)
         .maybeSingle(),
-      db
+      readAllRows(() => db
         .from("archived_preferences")
         .select("*")
-        .order("archived_at", { ascending: false }),
+        .order("archived_at", { ascending: false })
+        .order("id")),
     ]);
     if (st.data) {
       setSettings({
         group_url: st.data.group_url || "",
         payment_instructions: st.data.payment_instructions || "",
+        payment_instructions_en: st.data.payment_instructions_en || "",
       });
-      setSettingsReady(true);
     }
-    if (w.data) setWishes(w.data);
-    if (a.data) setArchivedWishes(a.data);
-    else if (a.error) console.error("Rush archive read error", a.error);
+    if (w.data && a.data) {
+      const start = weekStart();
+      setWishes(w.data.filter((row) => !row.archived_at && row.week_start >= start));
+      setArchivedWishes([
+        ...w.data.filter((row) => row.archived_at || row.week_start < start),
+        ...a.data,
+      ]);
+    } else {
+      console.error("Rush wishes read error", w.error || a.error);
+      flash("تعذر تحميل الرغبات.");
+    }
     if (r.data) setRegistrations(r.data);
     load();
   }
@@ -276,81 +267,27 @@ function App() {
   }, [tab, adminPath, sessions.length]);
   const flash = (t) => {
     setNotice(t);
-    setTimeout(() => setNotice(""), 4500);
+    clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(""), 4500);
   };
   const toggle = (v, set, x) =>
     set(v.includes(x) ? v.filter((a) => a !== x) : [...v, x]);
   const resetPerson = () => setPerson({ name: "", phone: "" });
-  async function saveWish(e) {
-    e.preventDefault();
-    if (
-      !validPhone(person.phone) ||
-      !person.name.trim() ||
-      !wishSports.length ||
-      !wishDays.length ||
-      !wishTimes.length ||
-      !wishRegions.length
-    )
-      return flash("كملي البيانات والاختيارات أولًا");
-    if (!db) return flash("هذه نسخة عرض. اربطي Supabase لتفعيل الحفظ.");
-    setBusy(true);
-    const rows = wishSports.flatMap((sport) =>
-      wishDays.flatMap((day) =>
-        wishTimes.map((period) => ({
-          name: person.name.trim(),
-          phone: person.phone,
-          sport,
-          day,
-          period,
-          week_start: weekStart(),
-        })),
-      ),
-    );
-    let error = null;
-    for (const row of rows) {
-      const result = await db.rpc("save_preference", {
-        p_name: row.name,
-        p_phone: row.phone,
-        p_sport: row.sport,
-        p_day: row.day,
-        p_period: row.period,
-        p_week_start: row.week_start,
-        p_regions: wishRegions,
-      });
-      if (result.error) {
-        error = result.error;
-        break;
-      }
+  async function toggleWishAlert(wish, subscribe) {
+    const saved = await wishAlerts.toggleAlert(wish, subscribe);
+    flash(saved
+      ? (subscribe ? t("تم تفعيل تنبيه الرغبة داخل الموقع.") : t("تم إيقاف التنبيه."))
+      : t("تعذر تحديث التنبيه. جربي مرة ثانية."));
+    return saved;
+  }
+  async function openMatchingSession(id) {
+    setShowAlerts(false);
+    setTab("sessions");
+    const available = await load();
+    if (!available?.some((s) => s.id === id)) {
+      return flash("الموعد انتهى أو لم يعد متاحًا.");
     }
-    setBusy(false);
-    if (error) {
-      console.error("Rush preference save failed:", {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-      });
-      const msg = error.message || "";
-      if (msg.includes("invalid preference"))
-        return flash(
-          "تعذر حفظ الرغبة: حدّثي دالة save_preference في Supabase لقبول الفترات الجديدة.",
-        );
-      if (
-        error.code === "PGRST202" ||
-        msg.includes("Could not find the function")
-      )
-        return flash(
-          "دالة حفظ الرغبات غير موجودة في Supabase. شغّلي ملف التحديث.",
-        );
-      return flash(
-        "تعذر حفظ الرغبات: " + (error.message || "راجعي قاعدة البيانات"),
-      );
-    }
-    flash("وصلتنا رغباتك! 🩷");
-    setWishSports([]);
-    setWishDays([]);
-    setWishTimes([]);
-    setWishRegions([]);
+    requestAnimationFrame(() => document.getElementById("session-" + id)?.scrollIntoView({ block: "center", behavior: "smooth" }));
   }
   async function joinSession(e) {
     e.preventDefault();
@@ -394,7 +331,7 @@ function App() {
       if (error.code === "42501")
         return flash("صلاحيات تسجيل المواعيد غير مفعّلة في قاعدة البيانات.");
       return flash(
-        "تعذر التسجيل: " + (error.message || error.code || "خطأ غير معروف"),
+        t("تعذر التسجيل: ") + (error.message || error.code || t("خطأ غير معروف")),
       );
     }
     setModal({ ...modal, done: true });
@@ -413,10 +350,10 @@ function App() {
       console.error("Rush admin login:", error.message);
       flash(
         error.message?.toLowerCase().includes("invalid login")
-          ? "البريد أو كلمة المرور غير صحيحة"
+          ? t("البريد أو كلمة المرور غير صحيحة")
           : error.message?.toLowerCase().includes("email not confirmed")
-            ? "البريد غير مؤكد في Supabase"
-            : "تعذر تسجيل الدخول: " + error.message,
+            ? t("البريد غير مؤكد في Supabase")
+            : t("تعذر تسجيل الدخول: ") + error.message,
       );
     } else setPw("");
   }
@@ -438,11 +375,11 @@ function App() {
       id: 1,
       group_url: link,
       payment_instructions: settings.payment_instructions.trim(),
+      payment_instructions_en: settings.payment_instructions_en.trim(),
     });
     setBusy(false);
     if (error)
       return flash("تعذر حفظ الإعدادات. تأكدي من تشغيل تحديث قاعدة البيانات.");
-    setSettingsReady(true);
     flash("تم حفظ الإعدادات");
     loadSettings();
   }
@@ -457,7 +394,7 @@ function App() {
       !Number.isFinite(Number(sessionForm.price))
     )
       return flash("حددي سعر الموعد");
-    if (new Date(sessionForm.ends_at) <= new Date(sessionForm.starts_at))
+    if (new Date(sessionForm.ends_at + "+03:00") <= new Date(sessionForm.starts_at + "+03:00"))
       return flash("تأكدي أن نهاية الموعد بعد بدايته");
     setBusy(true);
     const payload = {
@@ -465,8 +402,8 @@ function App() {
       location_url: verifiedLocation || null,
       price: Number(sessionForm.price),
       capacity: Number(sessionForm.capacity),
-      starts_at: new Date(sessionForm.starts_at).toISOString(),
-      ends_at: new Date(sessionForm.ends_at).toISOString(),
+      starts_at: new Date(sessionForm.starts_at + "+03:00").toISOString(),
+      ends_at: new Date(sessionForm.ends_at + "+03:00").toISOString(),
     };
     const { error } = edit
       ? await db.from("sessions").update(payload).eq("id", edit)
@@ -499,8 +436,8 @@ function App() {
       console.error("Rush edit wish", error);
       return flash(
         error.code === "23505"
-          ? "هذه الرغبة مسجلة بالفعل لنفس الرقم"
-          : "تعذر تعديل الرغبة. شغلي تحديث Supabase.",
+          ? t("هذه الرغبة مسجلة بالفعل لنفس الرقم")
+          : t("تعذر تعديل الرغبة. شغلي تحديث Supabase."),
       );
     }
     setEditingWish(null);
@@ -510,17 +447,10 @@ function App() {
   async function manageSelectedWishes(action) {
     if (!db || !selectedWishIds.length) return;
     const ids = [...selectedWishIds];
-    const verb = action === "archive" ? "نقل" : "حذف";
-    if (
-      !window.confirm(
-        action === "archive"
-          ? "نقل " +
-              ids.length +
-              " رغبة إلى قائمة المنتهية؟ ستُحفظ التفاصيل حسب رقم الجوال، ولا يعني هذا أن اللاعبة حضرت."
-          : "حذف " + ids.length + " رغبة نهائيًا؟ لا يمكن استرجاع المحذوفات.",
-      )
-    )
-      return;
+    const prompt = t(action === "archive"
+      ? t("أرشفة الرغبات المحددة ({count})؟")
+      : t("حذف الرغبات المحددة نهائيًا ({count})؟"));
+    if (!window.confirm(prompt.replace("{count}", ids.length))) return;
     setWishActionBusy(true);
     const { data, error } = await db.rpc("manage_preferences", {
       p_ids: ids,
@@ -536,10 +466,10 @@ function App() {
       });
       const message =
         error.code === "42501"
-          ? "صلاحية الإدارة غير مفعّلة على بريدك في Supabase. راجعي دالة is_admin."
+          ? t("صلاحية الإدارة غير مفعّلة على بريدك في Supabase. راجعي دالة is_admin.")
           : error.code === "PGRST202" || error.code === "42883"
-            ? "الدالة manage_preferences غير موجودة في قاعدة البيانات المرتبطة بالموقع."
-            : "فشل الإجراء: " + error.message;
+            ? t("الدالة manage_preferences غير موجودة في قاعدة البيانات المرتبطة بالموقع.")
+            : t("فشل الإجراء: ") + error.message;
       return flash(message);
     }
     setWishes((prev) => prev.filter((w) => !ids.includes(w.id)));
@@ -548,24 +478,19 @@ function App() {
       setWishView("archived");
       await loadAdmin();
     }
-    flash(
-      "تم " +
-        verb +
-        " " +
-        (typeof data === "number" ? data : ids.length) +
-        " رغبة بنجاح",
-    );
+    const message = t(action === "archive" ? t("تمت أرشفة الرغبات ({count}).") : t("تم حذف الرغبات ({count})."));
+    flash(message.replace("{count}", typeof data === "number" ? data : ids.length));
   }
   async function deleteWish(id) {
     setOpenWishMenu(null);
-    if (!window.confirm("حذف هذه الرغبة نهائيًا؟")) return;
+    if (!window.confirm(t("حذف هذه الرغبة نهائيًا؟"))) return;
     const { error } = await db.rpc("manage_preferences", {
       p_ids: [id],
       p_action: "delete",
     });
     if (error) {
       console.error("Rush delete wish error", error);
-      return flash("تعذر حذف الرغبة: " + error.message);
+      return flash(t("تعذر حذف الرغبة: ") + error.message);
     }
     setWishes((prev) => prev.filter((w) => w.id !== id));
     setSelectedWishIds((prev) => prev.filter((x) => x !== id));
@@ -589,7 +514,8 @@ function App() {
     const w = editingArchive;
     if (!validPhone(w.phone)) return flash("رقم الجوال غير صحيح");
     setBusy(true);
-    const { error } = await db.rpc("edit_archived_preference", {
+    const { error } = await db.rpc(w.source_preference_id ? "edit_archived_preference" : "update_preference", {
+      ...(!w.source_preference_id && { p_name: w.name }),
       p_id: w.id,
       p_phone: w.phone,
       p_sport: w.sport,
@@ -600,7 +526,7 @@ function App() {
     setBusy(false);
     if (error) {
       console.error("Rush archive edit", error);
-      return flash("تعذر تعديل سجل المنتهية: " + error.message);
+      return flash(t("تعذر تعديل سجل المنتهية: ") + error.message);
     }
     setArchivedWishes((prev) =>
       prev.map((x) => (x.id === w.id ? { ...x, ...w } : x)),
@@ -608,16 +534,18 @@ function App() {
     setEditingArchive(null);
     flash("تم تعديل السجل");
   }
-  async function removeArchiveItem(id) {
-    if (!window.confirm("حذف هذه الرغبة من سجل المنتهية نهائيًا؟")) return;
+  async function removeArchiveItem(wish) {
+    if (!window.confirm(t("حذف هذه الرغبة من سجل المنتهية نهائيًا؟"))) return;
     setBusy(true);
-    const { error } = await db.rpc("delete_archived_preference", { p_id: id });
+    const { error } = wish.source_preference_id
+      ? await db.rpc("delete_archived_preference", { p_id: wish.id })
+      : await db.rpc("manage_preferences", { p_ids: [wish.id], p_action: "delete" });
     setBusy(false);
     if (error) {
       console.error("Rush archive delete", error);
-      return flash("تعذر حذف السجل: " + error.message);
+      return flash(t("تعذر حذف السجل: ") + error.message);
     }
-    setArchivedWishes((prev) => prev.filter((w) => w.id !== id));
+    setArchivedWishes((prev) => prev.filter((w) => w.id !== wish.id));
     flash("تم حذف السجل");
   }
   async function saveRegistrationEdit(e) {
@@ -637,8 +565,8 @@ function App() {
       console.error("Rush registration edit", error);
       return flash(
         error.code === "23505"
-          ? "الرقم مسجل في هذا الموعد بالفعل"
-          : "تعذر تعديل تسجيل اللاعبة: " + error.message,
+          ? t("الرقم مسجل في هذا الموعد بالفعل")
+          : t("تعذر تعديل تسجيل اللاعبة: ") + error.message,
       );
     }
     setRegistrations((prev) =>
@@ -652,7 +580,7 @@ function App() {
   async function cancelRegistration(id) {
     if (
       !window.confirm(
-        "إلغاء تسجيل هذه اللاعبة من الموعد؟ سيتوفر مقعد بدلًا عنها.",
+        t("إلغاء تسجيل هذه اللاعبة من الموعد؟ سيتوفر مقعد بدلًا عنها."),
       )
     )
       return;
@@ -661,21 +589,14 @@ function App() {
     setBusy(false);
     if (error) {
       console.error("Rush registration cancel", error);
-      return flash("تعذر إلغاء تسجيل اللاعبة: " + error.message);
+      return flash(t("تعذر إلغاء تسجيل اللاعبة: ") + error.message);
     }
     setRegistrations((prev) => prev.filter((x) => x.id !== id));
-    setCounts((prev) => {
-      const reg = registrations.find((x) => x.id === id);
-      if (!reg) return prev;
-      return {
-        ...prev,
-        [reg.session_id]: Math.max(0, (prev[reg.session_id] || 0) - 1),
-      };
-    });
+    await load();
     flash("تم إلغاء التسجيل وتحرير المقعد");
   }
   async function deleteSession(id) {
-    if (!confirm("حذف هذا الموعد وجميع طلبات الانضمام له؟")) return;
+    if (!confirm(t("حذف هذا الموعد وجميع طلبات الانضمام له؟"))) return;
     const { error } = await db.from("sessions").delete().eq("id", id);
     if (error) flash("تعذر حذف الموعد");
     else {
@@ -735,11 +656,8 @@ function App() {
       return acc;
     }, {}),
   ).sort((a, b) => b.entries.length - a.entries.length);
-  const dateLocal = (d) => {
-    const x = new Date(d),
-      offset = x.getTimezoneOffset() * 60000;
-    return new Date(x - offset).toISOString().slice(0, 16);
-  };
+  const dateLocal = (value) =>
+    new Date(new Date(value).getTime() + 3 * 60 * 60 * 1000).toISOString().slice(0, 16);
   const repeatSession = (session) => {
     setEdit(null);
     setSessionForm({
@@ -764,205 +682,105 @@ function App() {
           <a className="logo" href={import.meta.env.BASE_URL} aria-label="Rush">
             <img
               src={import.meta.env.BASE_URL + "rush-logo-dark.svg"}
-              alt="شعار Rush"
+              alt={t("شعار Rush")}
             />
           </a>
           {!adminPath && (
             <div className="public-nav-wrap">
-              {tab === "sessions" && (
-                <span className="wish-arrow-hint" aria-hidden="true">←</span>
-              )}
               <nav>
                 <button
                   className={tab === "wishes" ? "selected" : ""}
                   onClick={() => setTab("wishes")}
                 >
-                  الرغبات
+                  {t("الرغبات")}
                 </button>
                 <button
                   className={tab === "sessions" ? "selected" : ""}
                   onClick={() => setTab("sessions")}
                 >
-                  المواعيد
+                  {t("المواعيد")}
                 </button>
               </nav>
             </div>
           )}
-          {adminPath && (
-            <button
-              type="button"
-              className="admin-label admin-logout"
-              onClick={async () => {
-                if (db && auth) {
-                  await db.auth.signOut();
-                  setAuth(null);
-                } else {
-                  flash("سجلي الدخول أولًا");
-                }
-              }}
-              title="تسجيل الخروج"
-            >
-              <LogOut size={17} /> الإدارة
+          <div className="header-tools">
+            {!adminPath && (
+              <button type="button" className="btn wish-bell" aria-expanded={showAlerts}
+                aria-controls={showAlerts ? "wish-alerts" : undefined}
+                aria-label={alertCount ? t("تنبيهات الرغبات") + " (" + alertCount + ")" : t("تنبيهات الرغبات")}
+                onClick={() => { setShowAlerts(!showAlerts); if (!showAlerts) load(); }}>
+                <Bell size={18} />
+                {alertCount > 0 && <span className="seat-pill wish-bell-count">{alertCount}</span>}
+              </button>
+            )}
+            <button type="button" className="btn language-toggle" lang={language === "ar" ? "en" : "ar"}
+              onClick={() => setLanguage(language === "ar" ? "en" : "ar")}>
+              {language === "ar" ? "EN" : "عربي"}
             </button>
-          )}
+            {adminPath && (
+              <button
+                type="button"
+                className="admin-label admin-logout"
+                onClick={async () => {
+                  if (db && auth) {
+                    await db.auth.signOut();
+                    setAuth(null);
+                  } else {
+                    flash("سجلي الدخول أولًا");
+                  }
+                }}
+                title={t("تسجيل الخروج")}
+              >
+                <LogOut size={17} />{" "}{t("الإدارة")}
+              </button>
+            )}
+          </div>
         </header>
+        {!adminPath && showAlerts && (
+          <WishAlertPanel {...wishAlerts} onToggle={toggleWishAlert} onSession={openMatchingSession}
+            sessions={sessions} t={t} />
+        )}
         {!adminPath ? (
           <>
             <section className="hero reveal">
               <h1>
-                قيمك الجاي
+                {t("قيمك الجاي")}
                 <br />
-                <em>مع Rush.</em>
+                <em>{t("مع Rush.")}</em>
               </h1>
             </section>
             <section className="content">
               <div className="section-heading reveal">
                 <div>
                   <span className="eyebrow">
-                    {tab === "wishes" ? "رغبات الأسبوع" : "المواعيد المتاحة"}
+                    {tab === "wishes" ? t("رغبات الأسبوع") : t("المواعيد المتاحة")}
                   </span>
                   <h2>
-                    {tab === "wishes" ? "وش ودك تلعبين؟" : "القيمات الجاية"}
+                    {tab === "wishes" ? t("وش ودك تلعبين؟") : t("القيمات الجاية")}
                   </h2>
                   <p className="wish-help-text">
                     {tab === "wishes"
-                      ? "كل ما سجلتي رغباتك تساعدينا نحدد تفاصيل المواعيد الجاية بشكل أدق."
-                      : "ما لقيتي موعد يناسبك؟ سجّلي رغباتك عشان تساعدينا نعرف الرياضة والوقت والمنطقة المناسبة لك في المواعيد الجاية."}
+                      ? t("صوّتي على رغبة موجودة أو أضيفي رغبتك للأسبوع. التصويت يساعدنا نختار المواعيد الجاية.")
+                      : t("ما لقيتي موعد يناسبك؟ سجّلي رغباتك عشان تساعدينا نعرف الرياضة والوقت والمنطقة المناسبة لك في المواعيد الجاية.")}
                   </p>
                 </div>
               </div>
               {tab === "wishes" ? (
-                <form className="panel form-panel reveal" onSubmit={saveWish}>
-                  <div className="fields">
-                    <label>
-                      اسمك
-                      <input
-                        value={person.name}
-                        onChange={(e) =>
-                          setPerson({ ...person, name: e.target.value })
-                        }
-                        required
-                        maxLength={70}
-                        placeholder="اكتبي اسمك"
-                      />
-                    </label>
-                    <label>
-                      رقم جوالك
-                      <input
-                        type="tel"
-                        inputMode="numeric"
-                        value={person.phone}
-                        onChange={(e) =>
-                          setPerson({
-                            ...person,
-                            phone: e.target.value
-                              .replace(/\D/g, "")
-                              .slice(0, 10),
-                          })
-                        }
-                        required
-                        placeholder="05XXXXXXXX"
-                      />
-                    </label>
-                  </div>
-                  <div className="choice-section">
-                    <h3>
-                      الرياضات <span>اختاري أكثر من واحدة</span>
-                    </h3>
-                    <div className="chips">
-                      {sports.map((s) => (
-                        <button
-                          type="button"
-                          key={s}
-                          className={
-                            "chip " + (wishSports.includes(s) ? "active" : "")
-                          }
-                          onClick={() => toggle(wishSports, setWishSports, s)}
-                        >
-                          {wishSports.includes(s) && <Check size={14} />} {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="choice-section">
-                    <h3>الأيام المناسبة</h3>
-                    <div className="chips">
-                      {days.map((d) => (
-                        <button
-                          type="button"
-                          key={d}
-                          className={
-                            "chip " + (wishDays.includes(d) ? "active" : "")
-                          }
-                          onClick={() => toggle(wishDays, setWishDays, d)}
-                        >
-                          {d}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="choice-section">
-                    <h3>الأوقات المناسبة</h3>
-                    <div className="chips">
-                      {times.map((t) => (
-                        <button
-                          type="button"
-                          key={t}
-                          className={
-                            "chip " + (wishTimes.includes(t) ? "active" : "")
-                          }
-                          onClick={() => toggle(wishTimes, setWishTimes, t)}
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="choice-section">
-                    <h3>
-                      المناطق المناسبة{" "}
-                      <span>اختاري كل المناطق اللي تقدرين تروحين لها</span>
-                    </h3>
-                    <div className="chips">
-                      {regions.map((r) => (
-                        <button
-                          type="button"
-                          key={r}
-                          className={
-                            "chip " + (wishRegions.includes(r) ? "active" : "")
-                          }
-                          onClick={() => toggle(wishRegions, setWishRegions, r)}
-                        >
-                          {wishRegions.includes(r) && <Check size={14} />} {r}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="form-bottom">
-                    <p>الرغبات للأسبوع الحالي، وما تعتبر حجزًا.</p>
-                    <IconButton
-                      icon={Heart}
-                      className="primary"
-                      disabled={busy}
-                    >
-                      حفظ رغبتي
-                    </IconButton>
-                  </div>
-                </form>
+                <WishBoard db={db} {...wishAlerts} onToggle={toggleWishAlert} t={t} flash={flash} />
               ) : (
                 <div className="session-grid">
                   {sessions.length ? (
                     sessions.map((s) => {
                       let count = counts[s.id] ?? s.count ?? 0;
                       return (
-                        <article className="session-card reveal" key={s.id}>
+                        <article className="session-card reveal" key={s.id} id={"session-" + s.id}>
                           <div className="session-top">
                             <span className="session-sport">
-                              {s.sport === "تنس ريشة" ? "🏸" : "🎾"} {s.sport}
+                              {s.sport === "تنس ريشة" ? "🏸" : "🎾"} {t(s.sport)}
                             </span>
                             <span className="seat-pill">
                               <Users size={14} />
-                              متبقي {Math.max(0, Number(s.capacity) - Number(count))}
+                              {t("متبقي")}{" "}{Math.max(0, Number(s.capacity) - Number(count))}
                             </span>
                           </div>
                           <div className="session-main">
@@ -978,20 +796,20 @@ function App() {
                               </span>
                               <span>
                                 <MapPin size={16} />
-                                {s.region || "الرياض"}
+                                {t(s.region || "الرياض")}
                               </span>
                               {safeMapUrl(s.location_url) && (
                                 <a className="session-map-link" href={safeMapUrl(s.location_url)} target="_blank" rel="noopener noreferrer">
-                                  <MapPin size={15} /> موقع الملعب على الخريطة
+                                  <MapPin size={15} />{" "}{t("موقع الملعب على الخريطة")}
                                 </a>
                               )}
                             </div>
                           </div>
                           <div className="session-bottom">
                             <span className="price-pill">
-                              <Riyal />
+                              <Riyal alt={t("ريال سعودي")} />
                               <b>
-                                {Number(s.price || 0).toLocaleString("ar-SA")}
+                                {Number(s.price || 0).toLocaleString(locale)}
                               </b>
                             </span>
                           </div>
@@ -1004,13 +822,13 @@ function App() {
                               setModal(s);
                             }}
                           >
-                            {count >= s.capacity ? "اكتمل العدد" : "أبغى ألعب"}
+                            {count >= s.capacity ? t("اكتمل العدد") : t("أبغى ألعب")}
                           </IconButton>
                         </article>
                       );
                     })
                   ) : (
-                    <div className="empty">ما فيه مواعيد معلنة حاليًا ♡</div>
+                    <div className="empty">{t("ما فيه مواعيد معلنة حاليًا ♡")}</div>
                   )}
                 </div>
               )}
@@ -1021,16 +839,15 @@ function App() {
                   <div className="footer-logo">
                     <img
                       src={import.meta.env.BASE_URL + "rush-logo-white.svg"}
-                      alt="شعار Rush"
+                      alt={t("شعار Rush")}
                     />
                   </div>
                   <div>
                     <strong>rush</strong>
                     <p>
-                      مجتمع رياضي للبنات في الرياض، يجمعنا حب اللعب والتجارب
-                      الجديدة.
+                      {t("مجتمع رياضي للبنات في الرياض، يجمعنا حب اللعب والتجارب الجديدة.")}
                       <br />
-                      اختاري رياضتك ووقتك، وخلي قيمك الجاي معنا!
+                      {t("اختاري رياضتك ووقتك، وخلي قيمك الجاي معنا!")}
                     </p>
                   </div>
                 </div>
@@ -1041,11 +858,11 @@ function App() {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <Users className="group-join-icon" size={18} /> انضمي للمجموعة
+                    <Users className="group-join-icon" size={18} />{" "}{t("انضمي للمجموعة")}
                   </a>
                 ) : (
                   <span className="footer-placeholder">
-                    <Users size={17} /> رابط المجموعة قريبًا
+                    <Users size={17} />{" "}{t("رابط المجموعة قريبًا")}
                   </span>
                 )}
               </div>
@@ -1055,12 +872,12 @@ function App() {
         ) : !auth ? (
           <section className="admin-login panel">
             <LockKeyhole size={30} />
-            <h2>إدارة Rush</h2>
-            <p>أدخلي كلمة المرور للمتابعة</p>
+            <h2>{t("إدارة Rush")}</h2>
+            <p>{t("أدخلي كلمة المرور للمتابعة")}</p>
             <form onSubmit={login}>
               <input
                 type="password"
-                placeholder="كلمة المرور"
+                placeholder={t("كلمة المرور")}
                 value={pw}
                 onChange={(e) => setPw(e.target.value)}
                 required
@@ -1070,7 +887,7 @@ function App() {
                 className="primary full"
                 disabled={busy}
               >
-                دخول
+                {t("دخول")}
               </IconButton>
             </form>
           </section>
@@ -1081,19 +898,19 @@ function App() {
                 className={adminTab === "sessions" ? "selected" : ""}
                 onClick={() => setAdminTab("sessions")}
               >
-                المواعيد
+                {t("المواعيد")}
               </button>
               <button
                 className={adminTab === "wishes" ? "selected" : ""}
                 onClick={() => setAdminTab("wishes")}
               >
-                الرغبات
+                {t("الرغبات")}
               </button>
               <button
                 className={adminTab === "settings" ? "selected" : ""}
                 onClick={() => setAdminTab("settings")}
               >
-                الإعدادات
+                {t("الإعدادات")}
               </button>
             </div>
             {adminTab === "settings" ? (
@@ -1101,9 +918,9 @@ function App() {
                 className="panel admin-form settings-form"
                 onSubmit={saveSettings}
               >
-                <h3>إعدادات Rush</h3>
+                <h3>{t("إعدادات Rush")}</h3>
                 <label>
-                  تعليمات الدفع
+                  {t("تعليمات الدفع")}
                   <textarea
                     rows="5"
                     value={settings.payment_instructions}
@@ -1113,11 +930,19 @@ function App() {
                         payment_instructions: e.target.value,
                       })
                     }
-                    placeholder="اكتبي تعليمات الدفع التي تظهر بعد التسجيل"
+                    placeholder={t("اكتبي تعليمات الدفع التي تظهر بعد التسجيل")}
                   />
                 </label>
                 <label>
-                  رابط مجموعة Rush
+                  {t("تعليمات الدفع بالإنجليزي (اختياري)")}
+                  <textarea
+                    dir="ltr"
+                    value={settings.payment_instructions_en}
+                    onChange={(e) => setSettings({ ...settings, payment_instructions_en: e.target.value })}
+                  />
+                </label>
+                <label>
+                  {t("رابط مجموعة Rush")}
                   <input
                     type="url"
                     dir="ltr"
@@ -1129,16 +954,16 @@ function App() {
                   />
                 </label>
                 <IconButton icon={Check} className="primary" disabled={busy}>
-                  حفظ الإعدادات
+                  {t("حفظ الإعدادات")}
                 </IconButton>
               </form>
             ) : adminTab === "sessions" ? (
               <>
                 <form className="panel admin-form" onSubmit={saveSession}>
-                  <h3>{edit ? "تعديل موعد" : "إضافة موعد"}</h3>
+                  <h3>{edit ? t("تعديل موعد") : t("إضافة موعد")}</h3>
                   <div className="fields">
                     <label>
-                      الرياضة
+                      {t("الرياضة")}
                       <select
                         value={sessionForm.sport}
                         onChange={(e) =>
@@ -1149,12 +974,12 @@ function App() {
                         }
                       >
                         {sports.map((s) => (
-                          <option key={s}>{s}</option>
+                          <option key={s} value={s}>{t(s)}</option>
                         ))}
                       </select>
                     </label>
                     <label>
-                      المكان
+                      {t("المكان")}
                       <input
                         required
                         value={sessionForm.venue}
@@ -1167,7 +992,7 @@ function App() {
                       />
                     </label>
                     <label>
-                      المنطقة
+                      {t("المنطقة")}
                       <select
                         value={sessionForm.region}
                         onChange={(e) =>
@@ -1179,13 +1004,13 @@ function App() {
                       >
                         {regions.map((r) => (
                           <option key={r} value={r}>
-                            {r}
+                            {t(r)}
                           </option>
                         ))}
                       </select>
                     </label>
                     <label>
-                      رابط موقع الملعب (اختياري)
+                      {t("رابط موقع الملعب (اختياري)")}
                       <input
                         type="url"
                         dir="ltr"
@@ -1200,14 +1025,14 @@ function App() {
                       />
                     </label>
                     <label>
-                      سعر اللاعبة (ريال)
+                      {t("سعر اللاعبة (ريال)")}
                       <input
                         required
                         type="number"
                         inputMode="decimal"
                         min="0"
                         step="0.01"
-                        placeholder="مثال: 50"
+                        placeholder={t("مثال: 50")}
                         value={sessionForm.price}
                         onChange={(e) =>
                           setSessionForm({
@@ -1218,7 +1043,7 @@ function App() {
                       />
                     </label>
                     <label>
-                      البداية
+                      {t("البداية")}
                       <input
                         required
                         type="datetime-local"
@@ -1232,7 +1057,7 @@ function App() {
                       />
                     </label>
                     <label>
-                      النهاية
+                      {t("النهاية")}
                       <input
                         required
                         type="datetime-local"
@@ -1246,7 +1071,7 @@ function App() {
                       />
                     </label>
                     <label>
-                      عدد المقاعد
+                      {t("عدد المقاعد")}
                       <input
                         type="number"
                         min="1"
@@ -1262,7 +1087,7 @@ function App() {
                     </label>
                   </div>
                   <IconButton icon={edit ? Check : Plus} className="primary">
-                    {edit ? "حفظ التعديل" : "إضافة الموعد"}
+                    {edit ? t("حفظ التعديل") : t("إضافة الموعد")}
                   </IconButton>
                   {edit && (
                     <button
@@ -1273,7 +1098,7 @@ function App() {
                         setSessionForm(blankSession());
                       }}
                     >
-                      إلغاء التعديل
+                      {t("إلغاء التعديل")}
                     </button>
                   )}
                 </form>
@@ -1282,24 +1107,24 @@ function App() {
                     <div className="admin-item-head">
                       <div>
                         <strong>
-                          {s.sport} · {s.venue}
+                          {t(s.sport)} · {s.venue}
                         </strong>
                         <p>
                           {fmt(s.starts_at)} · {hour(s.starts_at)} ·{" "}
-                          متبقي {Math.max(0, Number(s.capacity) - Number(counts[s.id] ?? s.count ?? 0))}
+                          {t("متبقي")}{" "}{Math.max(0, Number(s.capacity) - Number(counts[s.id] ?? s.count ?? 0))}
                         </p>
                       </div>
                       <div className="mini-actions">
                         <button
                           type="button"
-                          aria-label="تكرار الموعد"
-                          title="تكرار الموعد"
+                          aria-label={t("تكرار الموعد")}
+                          title={t("تكرار الموعد")}
                           onClick={() => repeatSession(s)}
                         >
                           <Copy size={17} />
                         </button>
                         <button
-                          aria-label="تعديل"
+                          aria-label={t("تعديل")}
                           onClick={() => {
                             setEdit(s.id);
                             setSessionForm({
@@ -1318,7 +1143,7 @@ function App() {
                           <Pencil size={17} />
                         </button>
                         <button
-                          aria-label="حذف"
+                          aria-label={t("حذف")}
                           onClick={() => deleteSession(s.id)}
                         >
                           <Trash2 size={17} />
@@ -1337,8 +1162,8 @@ function App() {
                             <span className="registration-actions">
                               <button
                                 type="button"
-                                aria-label={"تعديل تسجيل " + r.name}
-                                title="تعديل اللاعبة"
+                                aria-label={t("تعديل تسجيل ") + r.name}
+                                title={t("تعديل اللاعبة")}
                                 onClick={() => setEditingRegistration({ ...r })}
                               >
                                 <Pencil size={16} />
@@ -1346,8 +1171,9 @@ function App() {
                               <button
                                 type="button"
                                 className="danger-action"
-                                title="إلغاء التسجيل"
-                                aria-label={"إلغاء تسجيل " + r.name}
+                                title={t("إلغاء التسجيل")}
+                                aria-label={t("إلغاء تسجيل ") + r.name}
+                                disabled={busy}
                                 onClick={() => cancelRegistration(r.id)}
                               >
                                 <Trash2 size={16} />
@@ -1367,23 +1193,23 @@ function App() {
                     className={wishView === "active" ? "selected" : ""}
                     onClick={() => setWishView("active")}
                   >
-                    الرغبات الحالية
+                    {t("الرغبات الحالية")}
                   </button>
                   <button
                     type="button"
                     className={wishView === "archived" ? "selected" : ""}
                     onClick={() => setWishView("archived")}
                   >
-                    المنتهية ({archivedWishes.length})
+                    {t("المنتهية (")}{archivedWishes.length})
                   </button>
                 </div>
                 {wishView === "active" ? (
                   <>
                     <div className="wish-filters panel">
                       {[
-                        { label: "الرياضات", options: sports, values: wishSportFilter, update: setWishSportFilter },
-                        { label: "الأيام", options: days, values: wishDayFilter, update: setWishDayFilter },
-                        { label: "المناطق", options: regions, values: wishRegionFilter, update: setWishRegionFilter }
+                        { label: t("الرياضات"), options: sports, values: wishSportFilter, update: setWishSportFilter },
+                        { label: t("الأيام"), options: days, values: wishDayFilter, update: setWishDayFilter },
+                        { label: t("المناطق"), options: regions, values: wishRegionFilter, update: setWishRegionFilter }
                       ].map((filter) => (
                         <fieldset className="wish-filter-group" key={filter.label}>
                           <legend>{filter.label}</legend>
@@ -1399,7 +1225,7 @@ function App() {
                                       : [...previous, option]
                                   )}
                                 />
-                                {option}
+                                {t(option)}
                               </label>
                             ))}
                           </div>
@@ -1410,7 +1236,7 @@ function App() {
                           setWishSportFilter([]);
                           setWishDayFilter([]);
                           setWishRegionFilter([]);
-                        }}>مسح التصفيات</button>
+                        }}>{t("مسح التصفيات")}</button>
                       )}
                     </div>
                     <div className="wish-controls">
@@ -1427,7 +1253,7 @@ function App() {
                           }
                           onChange={selectFilteredWishes}
                         />{" "}
-                        تحديد الظاهر (
+                        {t("تحديد الظاهر (")}
                         {groupedWishes.reduce(
                           (n, g) => n + g.players.length,
                           0,
@@ -1435,19 +1261,19 @@ function App() {
                         )
                       </label>
                       <span className="wish-total">
-                        {groupedWishes.length} مجموعات · مرتبة حسب العدد
+                        {groupedWishes.length}{" "}{t("مجموعات · مرتبة حسب العدد")}
                       </span>
                     </div>
                     {selectedWishIds.length > 0 && (
                       <div className="wish-bulk-bar">
-                        <strong>تم تحديد {selectedWishIds.length}</strong>
+                        <strong>{t("تم تحديد")}{" "}{selectedWishIds.length}</strong>
                         <div>
                           <button
                             type="button"
                             disabled={wishActionBusy}
                             onClick={() => manageSelectedWishes("archive")}
                           >
-                            <Check size={16} /> نقل للمنتهية
+                            <Check size={16} />{" "}{t("نقل للمنتهية")}
                           </button>
                           <button
                             type="button"
@@ -1455,14 +1281,14 @@ function App() {
                             className="danger"
                             onClick={() => manageSelectedWishes("delete")}
                           >
-                            <Trash2 size={16} /> حذف المحدد
+                            <Trash2 size={16} />{" "}{t("حذف المحدد")}
                           </button>
                           <button
                             type="button"
                             className="clear-selection"
                             onClick={() => setSelectedWishIds([])}
                           >
-                            إلغاء التحديد
+                            {t("إلغاء التحديد")}
                           </button>
                         </div>
                       </div>
@@ -1472,11 +1298,11 @@ function App() {
                         <section className="panel wish-group" key={g.key}>
                           <div className="wish-group-head">
                             <div>
-                              <h3>{g.sport}</h3>
+                              <h3>{t(g.sport)}</h3>
                               <p>
-                                {g.day} · {g.period}
+                                {t(g.day)} · {t(g.period || t("أي وقت"))}
                               </p>
-                              <small>أسبوع {g.week_start}</small>
+                              <small>{t("أسبوع")}{" "}{g.week_start}</small>
                             </div>
                             <span className="wish-count">
                               <Users size={16} />
@@ -1489,7 +1315,7 @@ function App() {
                                 <input
                                   className="wish-checkbox"
                                   type="checkbox"
-                                  aria-label={"تحديد رغبة " + w.phone}
+                                  aria-label={t("تحديد رغبة ") + w.phone}
                                   checked={selectedWishIds.includes(w.id)}
                                   onChange={() => toggleWishSelection(w.id)}
                                 />
@@ -1499,15 +1325,15 @@ function App() {
                                   <small>
                                     {Array.isArray(w.regions) &&
                                     w.regions.length
-                                      ? w.regions.join(" · ")
-                                      : "لم تُحدد مناطق"}
+                                      ? w.regions.map(t).join(" · ")
+                                      : t("لم تُحدد مناطق")}
                                   </small>
                                 </div>
                                 <div className="wish-menu-wrap">
                                   <button
                                     type="button"
                                     className="wish-menu-trigger"
-                                    aria-label={"خيارات رغبة " + w.name}
+                                    aria-label={t("خيارات رغبة ") + w.name}
                                     aria-expanded={openWishMenu === w.id}
                                     onClick={() =>
                                       setOpenWishMenu(
@@ -1529,14 +1355,14 @@ function App() {
                                           setOpenWishMenu(null);
                                         }}
                                       >
-                                        <Pencil size={16} /> تعديل الرغبة
+                                        <Pencil size={16} />{" "}{t("تعديل الرغبة")}
                                       </button>
                                       <button
                                         type="button"
                                         className="danger"
                                         onClick={() => deleteWish(w.id)}
                                       >
-                                        <Trash2 size={16} /> حذف الرغبة
+                                        <Trash2 size={16} />{" "}{t("حذف الرغبة")}
                                       </button>
                                     </div>
                                   )}
@@ -1548,15 +1374,14 @@ function App() {
                       ))
                     ) : (
                       <div className="panel wish-empty">
-                        ما فيه رغبات مطابقة.
+                        {t("ما فيه رغبات مطابقة.")}
                       </div>
                     )}
                   </>
                 ) : (
                   <>
                     <p className="archive-note">
-                      هذه رغبات نُقلت للأرشيف حسب رقم الجوال، وليست إثباتًا
-                      لحضور اللاعبات.
+                      {t("تُحفظ هنا رغبات الأسابيع السابقة، مرتبة حسب رقم الجوال.")}
                     </p>
                     {phoneHistory.length ? (
                       phoneHistory.map((p) => (
@@ -1564,50 +1389,51 @@ function App() {
                           <div className="archive-phone-head">
                             <strong dir="ltr">{p.phone}</strong>
                             <span className="wish-count">
-                              {p.entries.length} رغبات
+                              {p.entries.length}{" "}{t("رغبات")}
                             </span>
                           </div>
                           <div className="archive-stats">
                             <div>
-                              <b>الرياضات</b>
+                              <b>{t("الرياضات")}</b>
                               {[...p.sports]
                                 .sort((a, b) => b[1] - a[1])
                                 .map(([sport, n]) => (
                                   <span key={sport}>
-                                    {sport} · {n}
+                                    {t(sport)} · {n}
                                   </span>
                                 ))}
                             </div>
                             <div>
-                              <b>المناطق المناسبة</b>
+                              <b>{t("المناطق المناسبة")}</b>
                               {[...p.regions]
                                 .sort((a, b) => b[1] - a[1])
                                 .map(([region, n]) => (
                                   <span key={region}>
-                                    {region} · {n}
+                                    {t(region)} · {n}
                                   </span>
                                 ))}
                             </div>
                           </div>
                           <details>
-                            <summary>سجل الرغبات ({p.entries.length})</summary>
+                            <summary>{t("سجل الرغبات (")}{p.entries.length})</summary>
                             {p.entries.map((w) => (
                               <div className="archive-entry" key={w.id}>
                                 <div>
-                                  <strong>{w.sport}</strong>
+                                  <strong>{t(w.sport)}</strong>
+                                  {w.name && <small> · {w.name}</small>}
                                   <p>
-                                    {w.day} · {w.period} · {w.week_start}
+                                    {t(w.day)} · {t(w.period || t("أي وقت"))} · {w.week_start}
                                   </p>
                                   <small>
-                                    {(w.regions || []).join(" · ") ||
-                                      "لا توجد مناطق"}
+                                    {(w.regions || []).map(t).join(" · ") ||
+                                      t("لا توجد مناطق")}
                                   </small>
                                 </div>
                                 <div className="archive-entry-actions">
                                   <button
                                     type="button"
-                                    title="تعديل السجل"
-                                    aria-label="تعديل سجل الرغبة"
+                                    title={t("تعديل السجل")}
+                                    aria-label={t("تعديل سجل الرغبة")}
                                     onClick={() =>
                                       setEditingArchive({
                                         ...w,
@@ -1620,9 +1446,9 @@ function App() {
                                   <button
                                     type="button"
                                     className="danger-action"
-                                    title="حذف السجل"
-                                    aria-label="حذف سجل الرغبة"
-                                    onClick={() => removeArchiveItem(w.id)}
+                                    title={t("حذف السجل")}
+                                    aria-label={t("حذف سجل الرغبة")}
+                                    onClick={() => removeArchiveItem(w)}
                                   >
                                     <Trash2 size={16} />
                                   </button>
@@ -1634,7 +1460,7 @@ function App() {
                       ))
                     ) : (
                       <div className="panel wish-empty">
-                        لا توجد رغبات منتهية بعد.
+                        {t("لا توجد رغبات منتهية بعد.")}
                       </div>
                     )}
                   </>
@@ -1655,15 +1481,15 @@ function App() {
             <button
               type="button"
               className="close"
-              aria-label="إغلاق"
+              aria-label={t("إغلاق")}
               onClick={() => setEditingRegistration(null)}
             >
               ×
             </button>
-            <h2>تعديل تسجيل اللاعبة</h2>
+            <h2>{t("تعديل تسجيل اللاعبة")}</h2>
             <form onSubmit={saveRegistrationEdit}>
               <label>
-                الاسم
+                {t("الاسم")}
                 <input
                   required
                   maxLength={70}
@@ -1677,7 +1503,7 @@ function App() {
                 />
               </label>
               <label>
-                رقم الجوال
+                {t("رقم الجوال")}
                 <input
                   required
                   type="tel"
@@ -1693,7 +1519,7 @@ function App() {
                 />
               </label>
               <IconButton className="primary full" icon={Check} disabled={busy}>
-                حفظ التعديل
+                {t("حفظ التعديل")}
               </IconButton>
             </form>
           </div>
@@ -1710,15 +1536,15 @@ function App() {
             <button
               type="button"
               className="close"
-              aria-label="إغلاق"
+              aria-label={t("إغلاق")}
               onClick={() => setEditingArchive(null)}
             >
               ×
             </button>
-            <h2>تعديل سجل الرغبة المنتهية</h2>
+            <h2>{t("تعديل سجل الرغبة المنتهية")}</h2>
             <form onSubmit={saveArchiveEdit}>
               <label>
-                رقم الجوال
+                {t("رقم الجوال")}
                 <input
                   required
                   type="tel"
@@ -1734,7 +1560,7 @@ function App() {
                 />
               </label>
               <label>
-                الرياضة
+                {t("الرياضة")}
                 <select
                   value={editingArchive.sport}
                   onChange={(e) =>
@@ -1746,31 +1572,32 @@ function App() {
                 >
                   {sports.map((v) => (
                     <option key={v} value={v}>
-                      {v}
+                      {t(v || t("أي وقت"))}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                اليوم
+                {t("اليوم")}
                 <select
                   value={editingArchive.day}
                   onChange={(e) =>
                     setEditingArchive({
                       ...editingArchive,
                       day: e.target.value,
+                      period: "",
                     })
                   }
                 >
                   {days.map((v) => (
                     <option key={v} value={v}>
-                      {v}
+                      {t(v || t("أي وقت"))}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                الفترة
+                {t("الفترة")}
                 <select
                   value={editingArchive.period}
                   onChange={(e) =>
@@ -1780,15 +1607,15 @@ function App() {
                     })
                   }
                 >
-                  {times.map((v) => (
+                  {["", ...periodsForDay(editingArchive.day)].map((v) => (
                     <option key={v} value={v}>
-                      {v}
+                      {t(v || t("أي وقت"))}
                     </option>
                   ))}
                 </select>
               </label>
               <div className="edit-regions">
-                <span>المناطق المناسبة</span>
+                <span>{t("المناطق المناسبة")}</span>
                 <div className="chips">
                   {regions.map((v) => (
                     <button
@@ -1807,13 +1634,13 @@ function App() {
                         })
                       }
                     >
-                      {v}
+                      {t(v)}
                     </button>
                   ))}
                 </div>
               </div>
               <IconButton className="primary full" icon={Check} disabled={busy}>
-                حفظ التعديل
+                {t("حفظ التعديل")}
               </IconButton>
             </form>
           </div>
@@ -1831,14 +1658,14 @@ function App() {
               type="button"
               className="close"
               onClick={() => setEditingWish(null)}
-              aria-label="إغلاق"
+              aria-label={t("إغلاق")}
             >
               ×
             </button>
-            <h2>تعديل الرغبة</h2>
+            <h2>{t("تعديل الرغبة")}</h2>
             <form onSubmit={saveEditedWish}>
               <label>
-                الاسم
+                {t("الاسم")}
                 <input
                   required
                   maxLength={70}
@@ -1849,7 +1676,7 @@ function App() {
                 />
               </label>
               <label>
-                رقم الجوال
+                {t("رقم الجوال")}
                 <input
                   required
                   dir="ltr"
@@ -1866,7 +1693,7 @@ function App() {
                 />
               </label>
               <label>
-                الرياضة
+                {t("الرياضة")}
                 <select
                   value={editingWish.sport}
                   onChange={(e) =>
@@ -1875,13 +1702,13 @@ function App() {
                 >
                   {sports.map((x) => (
                     <option key={x} value={x}>
-                      {x}
+                      {t(x || t("أي وقت"))}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                اليوم
+                {t("اليوم")}
                 <select
                   value={editingWish.day}
                   onChange={(e) =>
@@ -1890,28 +1717,28 @@ function App() {
                 >
                   {days.map((x) => (
                     <option key={x} value={x}>
-                      {x}
+                      {t(x || t("أي وقت"))}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                الفترة
+                {t("الفترة")}
                 <select
                   value={editingWish.period}
                   onChange={(e) =>
                     setEditingWish({ ...editingWish, period: e.target.value })
                   }
                 >
-                  {times.map((x) => (
+                  {["", ...periodsForDay(editingWish.day)].map((x) => (
                     <option key={x} value={x}>
-                      {x}
+                      {t(x || t("أي وقت"))}
                     </option>
                   ))}
                 </select>
               </label>
               <div className="edit-regions">
-                <span>المناطق المناسبة</span>
+                <span>{t("المناطق المناسبة")}</span>
                 <div className="chips">
                   {regions.map((x) => (
                     <button
@@ -1930,19 +1757,19 @@ function App() {
                         })
                       }
                     >
-                      {x}
+                      {t(x)}
                     </button>
                   ))}
                 </div>
               </div>
               <IconButton icon={Check} className="primary full" disabled={busy}>
-                حفظ التعديل
+                {t("حفظ التعديل")}
               </IconButton>
             </form>
           </div>
         </div>
       )}
-      {notice && <div className="toast">{notice}</div>}
+      {notice && <div className="toast" role="status">{t(notice)}</div>}
       {modal && (
         <div
           className="modal-backdrop"
@@ -1951,7 +1778,7 @@ function App() {
           }}
         >
           <div className="modal panel">
-            <button className="close" onClick={() => setModal(null)}>
+            <button className="close" aria-label={t("إغلاق")} onClick={() => setModal(null)}>
               ×
             </button>
             {modal.done ? (
@@ -1959,33 +1786,35 @@ function App() {
                 <div className="success-icon">
                   <Check size={26} />
                 </div>
-                <h2>وصلنا طلبك ♡</h2>
-                <p>تعليمات الدفع</p>
+                <h2>{t("وصلنا طلبك ♡")}</h2>
+                <p>{t("تعليمات الدفع")}</p>
                 <div className="payment-note">
-                  {settings.payment_instructions}
+                  {language === "en"
+                    ? settings.payment_instructions_en || t(settings.payment_instructions)
+                    : settings.payment_instructions}
                 </div>
                 <IconButton
                   icon={Check}
                   className="primary full"
                   onClick={() => setModal(null)}
                 >
-                  تمام
+                  {t("تمام")}
                 </IconButton>
               </>
             ) : (
               <>
-                <span className="eyebrow">الانضمام للقيم</span>
-                <h2>{modal.sport}</h2>
+                <span className="eyebrow">{t("الانضمام للقيم")}</span>
+                <h2>{t(modal.sport)}</h2>
                 <p>
                   {fmt(modal.starts_at)} · {hour(modal.starts_at)}
                 </p>
                 <form onSubmit={joinSession}>
                   <label>
-                    اسمك
+                    {t("اسمك")}
                     <input
                       required
                       maxLength={70}
-                      placeholder="اسمك"
+                      placeholder={t("اسمك")}
                       value={person.name}
                       onChange={(e) =>
                         setPerson({ ...person, name: e.target.value })
@@ -1993,10 +1822,11 @@ function App() {
                     />
                   </label>
                   <label>
-                    رقم جوالك
+                    {t("رقم جوالك")}
                     <input
                       required
                       type="tel"
+                      dir="ltr"
                       inputMode="numeric"
                       placeholder="05XXXXXXXX"
                       value={person.phone}
@@ -2013,10 +1843,10 @@ function App() {
                     className="primary full"
                     disabled={busy}
                   >
-                    تسجيل الاهتمام
+                    {t("تسجيل الاهتمام")}
                   </IconButton>
                 </form>
-                <small>بعد التسجيل بتظهر لك تعليمات الدفع.</small>
+                <small>{t("بعد التسجيل بتظهر لك تعليمات الدفع.")}</small>
               </>
             )}
           </div>
