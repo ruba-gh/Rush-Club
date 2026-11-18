@@ -1788,17 +1788,22 @@ html[lang="en"] .wish-menu {
   .topbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "brand tools" "navigation navigation";
     gap: 8px;
   }
 
+  .topbar > .logo {
+    grid-area: brand;
+    direction: inherit;
+    justify-self: start;
+  }
+
   .public-nav-wrap {
-    grid-column: 1 / -1;
-    grid-row: 2;
+    grid-area: navigation;
     justify-content: center;
   }
 
   .header-tools {
-    grid-column: 2;
-    grid-row: 1;
+    grid-area: tools;
   }
 }
