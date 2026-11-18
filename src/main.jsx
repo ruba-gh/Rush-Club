@@ -19,10 +19,9 @@ import {
   ShieldCheck,
   MoreHorizontal,
   Copy,
-  Bell,
 } from "lucide-react";
 import "./style.css";
-import { days, regions, sports, periodsForDay, useWishAlerts, WishAlertPanel, WishBoard } from "./wishes";
+import { days, regions, sports, periodsForDay, WishBoard } from "./wishes";
 import { translate } from "./translations";
 const url = import.meta.env.VITE_SUPABASE_URL,
   key = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -116,9 +115,6 @@ function App() {
       .replace(/\/$/, "")
       .endsWith("/ادارة") ||
     location.pathname.replace(/\/$/, "").endsWith("/admin");
-  const [showAlerts, setShowAlerts] = useState(false);
-  const wishAlerts = useWishAlerts(db, !adminPath);
-  const alertCount = new Set(wishAlerts.alerts.flatMap((alert) => alert.session_ids)).size;
   const [settings, setSettings] = useState({
       group_url: defaultGroup,
       payment_instructions: defaultPayment,
@@ -273,22 +269,6 @@ function App() {
   const toggle = (v, set, x) =>
     set(v.includes(x) ? v.filter((a) => a !== x) : [...v, x]);
   const resetPerson = () => setPerson({ name: "", phone: "" });
-  async function toggleWishAlert(wish, subscribe) {
-    const saved = await wishAlerts.toggleAlert(wish, subscribe);
-    flash(saved
-      ? (subscribe ? t("تم تفعيل تنبيه الرغبة داخل الموقع.") : t("تم إيقاف التنبيه."))
-      : t("تعذر تحديث التنبيه. جربي مرة ثانية."));
-    return saved;
-  }
-  async function openMatchingSession(id) {
-    setShowAlerts(false);
-    setTab("sessions");
-    const available = await load();
-    if (!available?.some((s) => s.id === id)) {
-      return flash("الموعد انتهى أو لم يعد متاحًا.");
-    }
-    requestAnimationFrame(() => document.getElementById("session-" + id)?.scrollIntoView({ block: "center", behavior: "smooth" }));
-  }
   async function joinSession(e) {
     e.preventDefault();
     if (!validPhone(person.phone) || !person.name.trim())
@@ -692,7 +672,7 @@ function App() {
                   className={tab === "wishes" ? "selected" : ""}
                   onClick={() => setTab("wishes")}
                 >
-                  {t("الرغبات")}
+                  {t("هالأسبوع")}
                 </button>
                 <button
                   className={tab === "sessions" ? "selected" : ""}
@@ -704,15 +684,6 @@ function App() {
             </div>
           )}
           <div className="header-tools">
-            {!adminPath && (
-              <button type="button" className="btn wish-bell" aria-expanded={showAlerts}
-                aria-controls={showAlerts ? "wish-alerts" : undefined}
-                aria-label={alertCount ? t("تنبيهات الرغبات") + " (" + alertCount + ")" : t("تنبيهات الرغبات")}
-                onClick={() => { setShowAlerts(!showAlerts); if (!showAlerts) load(); }}>
-                <Bell size={18} />
-                {alertCount > 0 && <span className="seat-pill wish-bell-count">{alertCount}</span>}
-              </button>
-            )}
             <button type="button" className="btn language-toggle" lang={language === "ar" ? "en" : "ar"}
               onClick={() => setLanguage(language === "ar" ? "en" : "ar")}>
               {language === "ar" ? "EN" : "عربي"}
@@ -736,10 +707,6 @@ function App() {
             )}
           </div>
         </header>
-        {!adminPath && showAlerts && (
-          <WishAlertPanel {...wishAlerts} onToggle={toggleWishAlert} onSession={openMatchingSession}
-            sessions={sessions} t={t} />
-        )}
         {!adminPath ? (
           <>
             <section className="hero reveal">
@@ -752,28 +719,28 @@ function App() {
             <section className="content">
               <div className="section-heading reveal">
                 <div>
-                  <span className="eyebrow">
-                    {tab === "wishes" ? t("رغبات الأسبوع") : t("المواعيد المتاحة")}
-                  </span>
+                  {tab === "sessions" && (
+                    <span className="eyebrow">{t("المواعيد المتاحة")}</span>
+                  )}
                   <h2>
-                    {tab === "wishes" ? t("وش ودك تلعبين؟") : t("القيمات الجاية")}
+                    {t(tab === "wishes" ? "متى تبين تلعبين ذا الأسبوع؟" : "القيمات الجاية")}
                   </h2>
                   <p className="wish-help-text">
-                    {tab === "wishes"
-                      ? t("صوّتي على رغبة موجودة أو أضيفي رغبتك للأسبوع. التصويت يساعدنا نختار المواعيد الجاية.")
-                      : t("ما لقيتي موعد يناسبك؟ سجّلي رغباتك عشان تساعدينا نعرف الرياضة والوقت والمنطقة المناسبة لك في المواعيد الجاية.")}
+                    {t(tab === "wishes"
+                      ? "اختاري وقت يناسبك من الخيارات تحت، أو أضيفي اختيارك."
+                      : "ما لقيتي موعد يناسبك؟ علمينا متى تبين تلعبين هالأسبوع.")}
                   </p>
                 </div>
               </div>
               {tab === "wishes" ? (
-                <WishBoard db={db} {...wishAlerts} onToggle={toggleWishAlert} t={t} flash={flash} />
+                <WishBoard db={db} weekStart={weekStart} t={t} flash={flash} />
               ) : (
                 <div className="session-grid">
                   {sessions.length ? (
                     sessions.map((s) => {
                       let count = counts[s.id] ?? s.count ?? 0;
                       return (
-                        <article className="session-card reveal" key={s.id} id={"session-" + s.id}>
+                        <article className="session-card reveal" key={s.id}>
                           <div className="session-top">
                             <span className="session-sport">
                               {s.sport === "تنس ريشة" ? "🏸" : "🎾"} {t(s.sport)}
