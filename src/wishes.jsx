@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Bell, BellOff, Heart, Plus } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Check, Plus } from "lucide-react";
 
 export const sports = ["تنس ريشة", "بادل", "تنس"];
 export const days = [
@@ -25,249 +25,144 @@ export const periodsForDay = (day) =>
     ? [...morningTimes, ...eveningTimes]
     : eveningTimes;
 
-export const wishKey = ({ sport, day, period, region }) =>
-  JSON.stringify([sport, day, period, region]);
-const wishArguments = ({ sport, day, period, region }) => ({
-  p_sport: sport,
-  p_day: day,
-  p_period: period,
-  p_region: region,
-});
-const emptyWish = () => ({ sport: "", day: "", period: "", region: "" });
-const deviceKey = "rush-wish-device";
+const emptyAnswer = () => ({ sport: "", day: "", period: "", regions: [] });
 
-export function useWishAlerts(db, enabled) {
-  const [device, setDevice] = useState(() =>
-    enabled ? localStorage.getItem(deviceKey) : null,
-  );
-  const [alerts, setAlerts] = useState([]);
-  const [error, setError] = useState(false);
-  const [pending, setPending] = useState(false);
-
-  useEffect(() => {
-    if (!db || !device || !enabled) return;
-    let active = true;
-    const refresh = async () => {
-      if (document.hidden) return;
-      const result = await db.rpc("rush_get_wish_alerts", {
-        p_device_id: device,
-      });
-      if (!active) return;
-      setError(Boolean(result.error));
-      if (!result.error) setAlerts(result.data || []);
-    };
-    refresh();
-    document.addEventListener("visibilitychange", refresh);
-    const interval = setInterval(refresh, 60_000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, [db, device, enabled]);
-
-  async function toggleAlert(wish, subscribe) {
-    if (!db || pending) return false;
-    setPending(true);
-    try {
-      const id = device || crypto.randomUUID();
-      if (!device) localStorage.setItem(deviceKey, id);
-      const result = await db.rpc("rush_set_wish_alert", {
-        p_device_id: id,
-        ...wishArguments(wish),
-        p_enabled: subscribe,
-      });
-      if (result.error) return false;
-      setDevice(id);
-      const updated = await db.rpc("rush_get_wish_alerts", { p_device_id: id });
-      if (updated.error) return false;
-      setAlerts(updated.data || []);
-      setError(false);
-      return (
-        (updated.data || []).some(
-          (entry) => wishKey(entry) === wishKey(wish),
-        ) === subscribe
-      );
-    } catch {
-      return false;
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return { alerts, error, pending, toggleAlert };
+function periodSymbol(period) {
+  if (morningTimes.includes(period)) return "☀️";
+  if (eveningTimes.includes(period)) return "🌙";
+  return null;
 }
 
-export function wishDetails(wish, t) {
-  return [
-    t(wish.day),
-    wish.period ? t(wish.period) : t("أي وقت"),
-    t(wish.region),
-  ].join(" · ");
-}
-
-export function WishAlertPanel({
-  alerts,
-  error,
-  pending,
-  onToggle,
-  onSession,
-  sessions,
-  t,
-}) {
-  return (
-    <section
-      className="panel wish-alert-panel"
-      id="wish-alerts"
-      aria-labelledby="wish-alert-heading"
-    >
-      <h2 id="wish-alert-heading">{t("تنبيهات الرغبات")}</h2>
-      <p>{t("بتشوفين المواعيد المطابقة لرغباتك هنا على نفس المتصفح.")}</p>
-      {error && <p role="status">{t("تعذر تحميل التنبيهات. جربي بعد شوي.")}</p>}
-      {!error && !alerts.length && (
-        <p>{t("فعّلي الجرس على أي رغبة عشان تتابعينها هنا.")}</p>
-      )}
-      {alerts.map((alert) => (
-        <article className="wish-alert-row" key={wishKey(alert)}>
-          <div>
-            <strong>{t(alert.sport)}</strong>
-            <p>{wishDetails(alert, t)}</p>
-            {alert.session_ids.length ? (
-              alert.session_ids.map((id) => (
-                <button
-                  className="text-button"
-                  key={id}
-                  type="button"
-                  onClick={() => onSession(id)}
-                >
-                  {sessions.find((session) => session.id === id)?.venue ||
-                    t("عرض الموعد المطابق")}
-                </button>
-              ))
-            ) : (
-              <small>{t("بانتظار موعد مطابق")}</small>
-            )}
-          </div>
-          <button
-            className="btn"
-            type="button"
-            disabled={pending}
-            onClick={() => onToggle(alert, false)}
-            aria-label={t("إيقاف التنبيه")}
-            title={t("إيقاف التنبيه")}
-          >
-            <BellOff size={16} />
-          </button>
-        </article>
-      ))}
-    </section>
-  );
-}
-
-export function WishBoard({ db, alerts, pending, onToggle, t, flash }) {
-  const [wishes, setWishes] = useState([]);
+export function WishBoard({ db, weekStart, t, flash }) {
+  const [options, setOptions] = useState([]);
   const [status, setStatus] = useState("loading");
-  const [mode, setMode] = useState(null);
-  const [wish, setWish] = useState(emptyWish);
+  const [answer, setAnswer] = useState(null);
+  const [isSuggested, setIsSuggested] = useState(false);
   const [person, setPerson] = useState({ name: "", phone: "" });
-  const [notify, setNotify] = useState(false);
-  const [filters, setFilters] = useState({ sport: "", day: "", region: "" });
+  const [sportFilter, setSportFilter] = useState("");
   const [busy, setBusy] = useState(false);
+  const form = useRef(null);
+  const openButton = useRef(null);
 
-  async function loadWishes() {
+  async function loadOptions() {
     if (!db) return setStatus("error");
-    const { data, error } = await db.rpc("rush_public_wishes");
+    const { data, error } = await db.rpc("rush_weekly_play_options");
     if (error) return setStatus("error");
-    setWishes(data || []);
+    setOptions(data || []);
     setStatus("ready");
   }
 
   useEffect(() => {
-    loadWishes();
+    loadOptions();
   }, [db]);
 
-  function openForm(type, selection = emptyWish()) {
-    setMode(type);
-    setWish(selection);
-    setNotify(false);
+  function openForm(event, option) {
+    openButton.current = event.currentTarget;
+    setIsSuggested(Boolean(option));
+    setAnswer(
+      option
+        ? {
+            sport: option.sport,
+            day: option.day,
+            period: option.period,
+            regions: option.regions.length === 1 ? [...option.regions] : [],
+          }
+        : emptyAnswer(),
+    );
+    requestAnimationFrame(() => {
+      form.current?.focus({ preventScroll: true });
+      form.current?.scrollIntoView({ block: "nearest" });
+    });
   }
 
-  async function save(e) {
-    e.preventDefault();
+  function closeForm() {
+    setAnswer(null);
+    openButton.current?.focus();
+  }
+
+  async function save(event) {
+    event.preventDefault();
     if (!person.name.trim() || !/^05\d{8}$/.test(person.phone)) {
       return flash("تأكدي من الاسم ورقم الجوال");
     }
+    if (!answer.regions.length) return flash("اختاري منطقة وحدة على الأقل");
     if (!db || busy) return;
     setBusy(true);
-    const { error } = await db.rpc("rush_vote_wish", {
+    const { error } = await db.rpc("save_preference", {
       p_name: person.name.trim(),
       p_phone: person.phone,
-      ...wishArguments(wish),
+      p_sport: answer.sport,
+      p_day: answer.day,
+      p_period: answer.period,
+      p_regions: answer.regions,
+      p_week_start: weekStart(),
     });
-    if (error) {
-      setBusy(false);
-      return flash("تعذر حفظ الرغبة. جربي مرة ثانية.");
-    }
-    flash(mode === "add" ? "وصلتنا رغبتك!" : "تم تسجيل صوتك!");
-    if (mode === "add") setFilters({ sport: "", day: "", region: "" });
-    if (notify) await onToggle(wish, true);
-    await loadWishes();
     setBusy(false);
-    setMode(null);
+    if (error) return flash("تعذر حفظ الرغبة. جربي مرة ثانية.");
+    if (!isSuggested) setSportFilter("");
+    closeForm();
+    flash("تم حفظ اختيارك!");
+    await loadOptions();
   }
 
-  const visibleWishes = wishes.filter((entry) =>
-    Object.entries(filters).every(
-      ([field, value]) => !value || entry[field] === value,
-    ),
+  const visible = options.filter(
+    (option) => !sportFilter || option.sport === sportFilter,
   );
 
   return (
     <div className="wish-board">
-      <button
-        className="btn primary"
-        type="button"
-        onClick={() => openForm("add")}
-      >
-        <Plus size={17} /> {t("إضافة رغبة")}
-      </button>
-      {mode && (
-        <form className="panel form-panel wish-vote-form" onSubmit={save}>
-          <h3>{mode === "add" ? t("إضافة رغبة") : t("تصويت على رغبة")}</h3>
-          {mode === "vote" && (
-            <p>
-              {t(wish.sport)} · {wishDetails(wish, t)}
-            </p>
-          )}
+      <div className="wish-board-toolbar">
+        <button className="btn primary" type="button" onClick={openForm}>
+          <Plus size={17} /> {t("أضيفي اختيارك")}
+        </button>
+        {status === "ready" && options.length > 0 && (
+          <label className="wish-sport-filter">
+            <span>{t("الرياضة")}</span>
+            <select
+              value={sportFilter}
+              onChange={(event) => setSportFilter(event.target.value)}
+            >
+              <option value="">{t("كل الرياضات")}</option>
+              {sports.map((sport) => (
+                <option key={sport} value={sport}>
+                  {t(sport)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
+      {answer && (
+        <form
+          ref={form}
+          tabIndex={-1}
+          className="panel form-panel wish-vote-form"
+          onSubmit={save}
+        >
+          <h3>
+            {isSuggested
+              ? [
+                  t(answer.day),
+                  t(answer.period || "أي وقت"),
+                  t(answer.sport),
+                ].join(" · ")
+              : t("أضيفي اختيارك")}
+          </h3>
           <fieldset className="wish-fieldset" disabled={busy}>
-            {mode === "add" && (
+            {!isSuggested && (
               <div className="fields">
-                <label>
-                  {t("الرياضة")}
-                  <select
-                    required
-                    value={wish.sport}
-                    onChange={(e) =>
-                      setWish({ ...wish, sport: e.target.value })
-                    }
-                  >
-                    <option value="" disabled>
-                      {t("اختاري رياضة")}
-                    </option>
-                    {sports.map((sport) => (
-                      <option key={sport} value={sport}>
-                        {t(sport)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
                 <label>
                   {t("اليوم")}
                   <select
                     required
-                    value={wish.day}
-                    onChange={(e) =>
-                      setWish({ ...wish, day: e.target.value, period: "" })
+                    value={answer.day}
+                    onChange={(event) =>
+                      setAnswer({
+                        ...answer,
+                        day: event.target.value,
+                        period: "",
+                      })
                     }
                   >
                     <option value="" disabled>
@@ -281,42 +176,72 @@ export function WishBoard({ db, alerts, pending, onToggle, t, flash }) {
                   </select>
                 </label>
                 <label>
-                  {t("المنطقة")}
-                  <select
-                    required
-                    value={wish.region}
-                    onChange={(e) =>
-                      setWish({ ...wish, region: e.target.value })
-                    }
-                  >
-                    <option value="" disabled>
-                      {t("اختاري منطقة")}
-                    </option>
-                    {regions.map((region) => (
-                      <option key={region} value={region}>
-                        {t(region)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
                   {t("الوقت (اختياري)")}
                   <select
-                    value={wish.period}
-                    onChange={(e) =>
-                      setWish({ ...wish, period: e.target.value })
+                    value={answer.period}
+                    onChange={(event) =>
+                      setAnswer({ ...answer, period: event.target.value })
                     }
                   >
                     <option value="">{t("أي وقت")}</option>
-                    {periodsForDay(wish.day).map((period) => (
+                    {periodsForDay(answer.day).map((period) => (
                       <option key={period} value={period}>
                         {t(period)}
                       </option>
                     ))}
                   </select>
                 </label>
+                <label>
+                  {t("الرياضة")}
+                  <select
+                    required
+                    value={answer.sport}
+                    onChange={(event) =>
+                      setAnswer({ ...answer, sport: event.target.value })
+                    }
+                  >
+                    <option value="" disabled>
+                      {t("اختاري رياضة")}
+                    </option>
+                    {sports.map((sport) => (
+                      <option key={sport} value={sport}>
+                        {t(sport)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
             )}
+            <fieldset className="wish-filter-group">
+              <legend>{t("اختاري المناطق اللي تناسبك")}</legend>
+              <div className="wish-filter-options">
+                {regions.map((region) => {
+                  const checked = answer.regions.includes(region);
+                  return (
+                    <label
+                      key={region}
+                      className={
+                        "wish-filter-option " + (checked ? "active" : "")
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setAnswer({
+                            ...answer,
+                            regions: checked
+                              ? answer.regions.filter((area) => area !== region)
+                              : [...answer.regions, region],
+                          })
+                        }
+                      />
+                      {t(region)}
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
             <div className="fields">
               <label>
                 {t("اسمك")}
@@ -325,8 +250,8 @@ export function WishBoard({ db, alerts, pending, onToggle, t, flash }) {
                   required
                   maxLength={70}
                   autoComplete="given-name"
-                  onChange={(e) =>
-                    setPerson({ ...person, name: e.target.value })
+                  onChange={(event) =>
+                    setPerson({ ...person, name: event.target.value })
                   }
                 />
               </label>
@@ -340,124 +265,112 @@ export function WishBoard({ db, alerts, pending, onToggle, t, flash }) {
                   required
                   placeholder="05XXXXXXXX"
                   value={person.phone}
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setPerson({
                       ...person,
-                      phone: e.target.value.replace(/\D/g, "").slice(0, 10),
+                      phone: event.target.value.replace(/\D/g, "").slice(0, 10),
                     })
                   }
                 />
               </label>
             </div>
-            <label className="wish-notify-choice">
-              <input
-                type="checkbox"
-                checked={notify}
-                onChange={(e) => setNotify(e.target.checked)}
-              />
-              <Bell size={16} /> {t("علموني لو فيه")}
-            </label>
             <div className="wish-actions">
               <button className="btn primary" type="submit">
-                <Heart size={17} /> {t(mode === "add" ? "حفظ رغبتي" : "صوتي")}
+                <Check size={17} /> {t("احفظي اختياري")}
               </button>
-              <button
-                className="text-button"
-                type="button"
-                onClick={() => setMode(null)}
-              >
+              <button className="text-button" type="button" onClick={closeForm}>
                 {t("إلغاء")}
               </button>
             </div>
           </fieldset>
         </form>
       )}
+
       {status === "loading" && <p role="status">{t("جاري تحميل الرغبات…")}</p>}
       {status === "error" && (
         <div className="empty">
           {t("تعذر تحميل الرغبات.")}{" "}
-          <button className="text-button" onClick={loadWishes}>
+          <button type="button" className="text-button" onClick={loadOptions}>
             {t("إعادة المحاولة")}
           </button>
         </div>
       )}
-      {status === "ready" && !wishes.length && (
+      {status === "ready" && !visible.length && (
         <div className="empty">
-          {t("ما فيه رغبات لهذا الأسبوع. أضيفي أول رغبة!")}
+          {t(
+            options.length
+              ? "ما فيه رغبات مطابقة."
+              : "ما فيه اختيارات هالأسبوع. أضيفي أول اختيار!",
+          )}
         </div>
       )}
-      {status === "ready" && wishes.length > 0 && (
-        <div className="fields wish-board-filters">
-          {[
-            ["sport", "الرياضة", "كل الرياضات", sports],
-            ["day", "اليوم", "كل الأيام", days],
-            ["region", "المنطقة", "كل المناطق", regions],
-          ].map(([field, label, all, options]) => (
-            <label key={field}>
-              {t(label)}
-              <select
-                value={filters[field]}
-                onChange={(e) =>
-                  setFilters({ ...filters, [field]: e.target.value })
-                }
-              >
-                <option value="">{t(all)}</option>
-                {options.map((value) => (
-                  <option key={value} value={value}>
-                    {t(value)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ))}
-        </div>
-      )}
-      {status === "ready" && wishes.length > 0 && !visibleWishes.length && (
-        <div className="empty">{t("ما فيه رغبات مطابقة.")}</div>
-      )}
-      <div className="wish-card-grid">
-        {visibleWishes.map((entry) => {
-          const key = wishKey(entry);
-          const subscribed = alerts.some((alert) => wishKey(alert) === key);
+      {status === "ready" &&
+        days.map((day) => {
+          const timeOrder = [...periodsForDay(day), ""];
+          const dayOptions = visible
+            .filter((option) => option.day === day)
+            .sort(
+              (a, b) =>
+                timeOrder.indexOf(a.period) - timeOrder.indexOf(b.period) ||
+                Number(b.player_count) - Number(a.player_count),
+            );
+          if (!dayOptions.length) return null;
           return (
-            <article className="panel wish-vote-card" key={key}>
-              <div className="wish-card-head">
-                <h3>{t(entry.sport)}</h3>
-                <span className="seat-pill">
-                  {entry.votes} {t(Number(entry.votes) === 1 ? "صوت" : "أصوات")}
-                </span>
+            <section key={day} className="wish-day">
+              <h3>{t(day)}</h3>
+              <div className="wish-card-grid">
+                {dayOptions.map((option) => (
+                  <article
+                    className="panel wish-vote-card"
+                    key={JSON.stringify([option.sport, option.period])}
+                  >
+                    <div className="wish-card-head">
+                      <h4>
+                        <span aria-hidden="true">
+                          {option.sport === "تنس ريشة" ? "🏸" : "🎾"}
+                        </span>
+                        {t(option.sport)}
+                      </h4>
+                      <span
+                        className="seat-pill"
+                        role="img"
+                        aria-label={
+                          option.player_count + " " + t("لاعبات مهتمات")
+                        }
+                      >
+                        <span aria-hidden="true">🏃‍♀️</span>
+                        {option.player_count}
+                      </span>
+                    </div>
+                    <p className="wish-card-time">
+                      {periodSymbol(option.period) && (
+                        <span aria-hidden="true">
+                          {periodSymbol(option.period)}
+                        </span>
+                      )}
+                      {t(option.period || "أي وقت")}
+                    </p>
+                    {option.regions.length > 0 && (
+                      <p className="wish-card-regions">
+                        {regions
+                          .filter((region) => option.regions.includes(region))
+                          .map((region) => t(region.replace(" الرياض", "")))
+                          .join(" · ")}
+                      </p>
+                    )}
+                    <button
+                      className="btn wish-join"
+                      type="button"
+                      onClick={(event) => openForm(event, option)}
+                    >
+                      <Check size={16} /> {t("يناسبني")}
+                    </button>
+                  </article>
+                ))}
               </div>
-              <p>{wishDetails(entry, t)}</p>
-              <div className="wish-actions">
-                <button
-                  className="btn primary"
-                  type="button"
-                  onClick={() => {
-                    openForm("vote", entry);
-                    requestAnimationFrame(() =>
-                      document
-                        .querySelector(".wish-vote-form")
-                        ?.scrollIntoView({ block: "center" }),
-                    );
-                  }}
-                >
-                  <Heart size={16} /> {t("صوتي")}
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  aria-pressed={subscribed}
-                  disabled={pending}
-                  onClick={() => onToggle(entry, !subscribed)}
-                >
-                  <Bell size={16} />{" "}
-                  {t(subscribed ? "التنبيه مفعّل" : "علموني لو فيه")}
-                </button>
-              </div>
-            </article>
+            </section>
           );
         })}
-      </div>
     </div>
   );
 }

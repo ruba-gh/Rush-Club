@@ -1675,39 +1675,87 @@ footer {
 }
 
 .wish-board,
-.wish-fieldset,
-.wish-alert-panel {
+.wish-fieldset {
   display: grid;
   gap: 16px;
 }
 
-.wish-board > .btn {
-  justify-self: start;
+.wish-board-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.wish-sport-filter {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: #65505a;
+}
+
+.wish-sport-filter select {
+  border: 1px solid #e8d5dd;
+  border-radius: 12px;
+  background: #fcf5f7;
+  color: #59444f;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.wish-day {
+  margin-block-start: 8px;
+}
+
+.wish-day > h3 {
+  margin: 0 0 10px;
+  color: #49353f;
 }
 
 .wish-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
-  gap: 14px;
-}
-
-.wish-vote-card,
-.wish-alert-panel {
-  padding: 20px;
-}
-
-.wish-card-head,
-.wish-alert-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 245px), 1fr));
   gap: 12px;
 }
 
-.wish-vote-card h3,
-.wish-alert-panel h2,
-.wish-alert-panel p {
+.wish-vote-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 16px;
+}
+
+.wish-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.wish-card-head h4,
+.wish-card-time,
+.wish-card-regions {
   margin: 0;
+}
+
+.wish-card-head h4,
+.wish-card-time {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.wish-card-time,
+.wish-card-regions {
+  font-size: 13px;
+  color: #65505a;
+}
+
+.wish-join {
+  justify-self: start;
+  margin-block-start: 4px;
+  padding: 8px 12px;
 }
 
 .wish-actions {
@@ -1724,52 +1772,11 @@ footer {
   min-width: 0;
 }
 
-.wish-notify-choice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.wish-notify-choice input {
-  width: auto;
-  margin: 0;
-  accent-color: var(--accent, #ad466b);
-}
-
-.wish-alert-panel {
-  margin-block: 12px;
-}
-
-.wish-alert-row + .wish-alert-row {
-  border-top: 1px solid #eadce1;
-  padding-top: 12px;
-}
-
-.wish-alert-row .text-button {
-  display: block;
-  margin-inline: 0;
-}
-
-.wish-bell {
-  position: relative;
-  flex: none;
-}
-
-.wish-bell-count {
-  position: absolute;
-  inset-block-start: -4px;
-  inset-inline-end: -4px;
-}
-
 .header-tools {
   display: flex;
   flex: none;
   align-items: center;
   gap: 8px;
-}
-
-.header-tools .wish-bell {
-  padding: 8px;
 }
 
 html[lang="en"] .wish-menu {
@@ -1793,16 +1800,5 @@ html[lang="en"] .wish-menu {
   .header-tools {
     grid-column: 2;
     grid-row: 1;
-  }
-}
-
-
-.wish-board-filters {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-@media (max-width: 540px) {
-  .wish-board-filters {
-    grid-template-columns: 1fr;
   }
 }
